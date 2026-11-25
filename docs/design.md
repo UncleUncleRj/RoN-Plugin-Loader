@@ -130,6 +130,9 @@ function pointers (no C++ ABI across the boundary). Version 1 provides:
   map header's `Timestamp is 6674863f`, corrected for ASLR. Parse cost is unmeasured; if it is
   slow, cache an index keyed on the timestamp.
 - **Hooks** (section 7).
+- **Byte patches** (my call): address, expected stock bytes, new bytes; checked and recorded like
+  hooks, so a plugin never writes game memory out of the loader's sight (RON Revived uses a
+  byte-patch table today).
 - **Files** (section 9).
 - **Events**, all on the main thread:
 
@@ -156,6 +159,10 @@ All code patching goes through the loader, which keeps one record per patched ad
   can decide whether the ones above it run at all, which matches "the lower one wins".
 - Forms offered: inline (5-byte `jmp` plus trampoline with relocated stolen bytes), call site
   (`E8 rel32`, no stolen bytes), vtable slot, import address table.
+- Hooks and byte patches are installed only while plugins load (during `pre_init`, before the game
+  starts its other threads) and are never removed (my call). A plugin that wants an in-game on/off
+  switch keeps its hook and checks its own flag. So no patch ever happens while game threads run,
+  and the chain never needs a link removed from the middle.
 - Every shared address is logged with the plugins involved, and recorded for the later conflict
   view.
 - RON Revived's hook table (`g_hooks[]`: name, address, signature bytes, stolen-byte count) and
@@ -186,6 +193,7 @@ same place and frame as the game's Solo, Multiplayer and Options panels (`topmen
 +------------------------------------+
 ```
 
+- The plugin names in the sketch are examples; no CBP plugin is part of this project.
 - Each row: load-order number, on/off box, name, version, up/down arrows. Selecting a row unfolds
   its details: author, description, how many files it serves and game functions it hooks (from
   the previous run's records), and why it failed to load, if it did.
@@ -244,10 +252,18 @@ Rules:
   listings need it.
 - Generators that feed the simulation (rules, units, techs, balance) must give the same output on
   every machine: no clock, no random numbers, no local settings.
+- Names are matched literally (my call). Under CBP's `riseofnations_CBP.exe` the game asks for
+  CBP's renamed files (`CBPa11_unitrules.xml` and so on, through CBP's own string table); a plugin
+  that wants to change those registers CBP's names itself, using the game identity from the API.
+  Translating names automatically is a later option. Check during the build that the main menu
+  still reads `topmenu.xml` under CBP (it is not one of the five names CBP's exe renames, but CBP's
+  string table might point it elsewhere).
 
 ## 10. Multiplayer
 
 - Each plugin declares `AffectsSim` in `plugin.ini` (and again at load).
+- A machine with no simulation-changing plugins publishes no key (my call: keeps a plugin-free game
+  identical to stock). A joiner with such plugins whose host publishes no key is warned all the same.
 - The host publishes a lobby key with the ordered list of its simulation-changing plugins: name,
   version, DLL hash, and the hash of every file they serve or generate. RON Revived's unit-ban
   feature already publishes its own key this way: `MultiplayerManager::LobbySetKey` (`0xA30B70`)
@@ -282,6 +298,9 @@ Later
 - Services: console commands (hook `ConsoleWin::parse_cmd`, `0x7D6470`), script functions
   (after `ScenarioFuncSet::init_funcs`), headers generated from `rise.pdb` for plugin authors.
 - A list of trusted plugin hashes.
+- Saves and replays record the list of simulation-changing plugins (a file beside the save keeps
+  the save format unchanged) and warn when loaded with a different list (my call to leave this out
+  of the first version; until then a replay played without its plugins diverges silently).
 - RON Revived moves onto the loader as an ordinary plugin (its own project in the mod's
   repository): hooks onto the shared hook manager, `override.c` replaced by the file service, the
   `winmm.dll` proxy retired.
