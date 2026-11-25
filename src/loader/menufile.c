@@ -163,6 +163,46 @@ static size_t line_start(const Text *t, size_t i)
     return i;
 }
 
+/* Whether only spaces and tabs stand between the start of i's line and i. */
+static int alone_on_line(const Text *t, size_t i)
+{
+    for (size_t k = line_start(t, i); k < i; k++)
+        if (t->s[k] != ' ' && t->s[k] != '\t')
+            return 0;
+    return 1;
+}
+
+/* The result as the game will read it: the text before TOPMENU unchanged, a plugins button inside
+   the full game's OPTIONS, and (when one was added) the PLUGINS panel after OPTIONS, closed before
+   </TOPMENU>. Anything else and the game keeps its own file. */
+static int placed_ok(const char *xml, size_t top, const char *out, size_t n, int panel_added)
+{
+    if (n < top || memcmp(out, xml, top) != 0)
+        return 0;
+    Text o = {out, n};
+    size_t ot = find_start(&o, 0, n, "TOPMENU");
+    if (ot != top)
+        return 0;
+    size_t otc = find_close(&o, tag_end(&o, ot), n, "TOPMENU");
+    size_t oo = find_start(&o, tag_end(&o, ot), otc, "OPTIONS");
+    if (otc >= n || oo >= otc)
+        return 0;
+    size_t ooc = find_close(&o, tag_end(&o, oo), otc, "OPTIONS");
+    if (ooc >= otc)
+        return 0;
+    int button = 0;
+    for (size_t i = next_tag(&o, tag_end(&o, oo)); i < ooc; i = next_tag(&o, i + 1))
+        if (tag_is(&o, i, "BUTTON", 0) && has_name(&o, i, "plugins"))
+            button = 1;
+    if (!button)
+        return 0;
+    if (!panel_added)
+        return 1;
+    size_t pp = find_start(&o, ooc, otc, "PLUGINS");
+    return pp < otc && find_close(&o, tag_end(&o, pp), otc, "PLUGINS") < otc &&
+           find_start(&o, tag_end(&o, ot), ooc, "PLUGINS") >= ooc;
+}
+
 /* Appends a text, turning "\n" into eol when convert is set; fails (returns 0) past cap. */
 static int put(char *out, size_t cap, size_t *at, const char *s, size_t n, const char *eol, int convert)
 {
@@ -216,6 +256,7 @@ size_t menufile_add_plugins(const char *xml, size_t len, char *out, size_t cap, 
     size_t button_at = len;  /* where the button text goes; len = nowhere */
     size_t indent_from = 0;
     int after = 0;           /* 1: insert eol + indent + button; 0: insert indent + button + eol */
+    int inline_button = 0;   /* the back button shares its line: insert the button text alone, before it */
     MfWhere w;
     if (plugins < opt_close) {
         w = MF_ALREADY;
@@ -226,7 +267,8 @@ size_t menufile_add_plugins(const char *xml, size_t len, char *out, size_t cap, 
         after = 1;
     } else if (back < opt_close) {
         w = MF_ABOVE_BACK;
-        button_at = line_start(&t, back);
+        inline_button = !alone_on_line(&t, back);
+        button_at = inline_button ? back : line_start(&t, back);
         indent_from = button_at;
     } else {
         return 0;
@@ -235,18 +277,24 @@ size_t menufile_add_plugins(const char *xml, size_t len, char *out, size_t cap, 
     while (button_at < len && indent_from + indent_len < len &&
            (xml[indent_from + indent_len] == ' ' || xml[indent_from + indent_len] == '\t'))
         indent_len++;
-    size_t panel_at = has_panel ? len : line_start(&t, top_close);
+    size_t panel_at = has_panel ? len : alone_on_line(&t, top_close) ? line_start(&t, top_close) : top_close;
+    if (button_at < len && panel_at < len && panel_at < button_at)
+        return 0;
 
     size_t at = 0;
     size_t pos = 0;
     if (button_at < len) {
         if (!put(out, cap, &at, xml, button_at, eol, 0))
             return 0;
-        if ((after && !put(out, cap, &at, eol, strlen(eol), eol, 0)) ||
-            !put(out, cap, &at, xml + indent_from, indent_len, eol, 0) ||
-            !put(out, cap, &at, k_button, sizeof k_button - 1, eol, 0) ||
-            (!after && !put(out, cap, &at, eol, strlen(eol), eol, 0)))
+        if (inline_button) {
+            if (!put(out, cap, &at, k_button, sizeof k_button - 1, eol, 0))
+                return 0;
+        } else if ((after && !put(out, cap, &at, eol, strlen(eol), eol, 0)) ||
+                   !put(out, cap, &at, xml + indent_from, indent_len, eol, 0) ||
+                   !put(out, cap, &at, k_button, sizeof k_button - 1, eol, 0) ||
+                   (!after && !put(out, cap, &at, eol, strlen(eol), eol, 0))) {
             return 0;
+        }
         pos = button_at;
     }
     if (panel_at < len) {
@@ -258,6 +306,8 @@ size_t menufile_add_plugins(const char *xml, size_t len, char *out, size_t cap, 
     if (!put(out, cap, &at, xml + pos, len - pos, eol, 0))
         return 0;
     out[at] = 0;
+    if (!placed_ok(xml, top, out, at, panel_at < len))
+        return 0;
     *where = w;
     return at;
 }

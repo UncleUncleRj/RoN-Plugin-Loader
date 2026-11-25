@@ -198,3 +198,59 @@ TEST(mf_panel_sections)
     }
     CHECK(prev_bottom <= pane[1] + pane[3]);
 }
+
+/* Compact files (final review): the whole file, or the end of OPTIONS and TOPMENU, on one line. The
+   result must keep everything before <ROOT> as it was, put the button inside OPTIONS and the panel
+   after </OPTIONS>, before </TOPMENU>. */
+static char g_in[8192];
+
+static const char *one_line(const char *in)
+{
+    size_t k = 0;
+    for (const char *c = in; *c && k + 1 < sizeof g_in; c++)
+        if (*c != '\r' && *c != '\n')
+            g_in[k++] = *c;
+    g_in[k] = 0;
+    return g_in;
+}
+
+static int structure_ok(const char *in)
+{
+    const char *root = strstr(g_out, "<ROOT>"), *opt = strstr(g_out, "<OPTIONS"), *optc = strstr(g_out, "</OPTIONS>");
+    const char *topc = strstr(g_out, "</TOPMENU>"), *btn = strstr(g_out, PLUGINS_BUTTON);
+    const char *pan = strstr(g_out, "<PLUGINS"), *panc = strstr(g_out, "</PLUGINS>");
+    const char *in_root = strstr(in, "<ROOT>");
+    if (!root || !opt || !optc || !topc || !btn || !pan || !panc || !in_root)
+        return 0;
+    if (root - g_out != in_root - in || memcmp(g_out, in, (size_t)(in_root - in)) != 0)
+        return 0;
+    return root < opt && opt < btn && btn < optc && optc < pan && pan < panc && panc < topc;
+}
+
+TEST(mf_one_line_without_workshop)
+{
+    MfWhere w;
+    const char *in = one_line(HEAD TAIL TRIAL);
+    CHECK(run(in, &w) > strlen(in));
+    CHECK_EQ(w, MF_ABOVE_BACK);
+    CHECK(structure_ok(in));
+}
+
+TEST(mf_one_line_with_workshop)
+{
+    MfWhere w;
+    const char *in = one_line(HEAD WORKSHOP TAIL TRIAL);
+    CHECK(run(in, &w) > strlen(in));
+    CHECK_EQ(w, MF_AFTER_WORKSHOP);
+    CHECK(structure_ok(in));
+}
+
+TEST(mf_close_tags_on_one_line)
+{
+    static const char in[] = HEAD WORKSHOP
+        "          <BUTTON name=\"back\" title=\"Back to Main Menu\" width=\"454\" height=\"35\"/>\r\n"
+        "        </POSITIONING>\r\n      </POSITIONING>\r\n    </OPTIONS></TOPMENU>\r\n" TRIAL;
+    MfWhere w;
+    CHECK(run(in, &w) > strlen(in));
+    CHECK(structure_ok(in));
+}
