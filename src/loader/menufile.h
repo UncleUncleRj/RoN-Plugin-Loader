@@ -4,7 +4,9 @@
  * (TOPMENU/OPTIONS, after the "workshop" button, else above "back") and the PLUGINS panel element
  * before </TOPMENU>. TOPMENU_TRIAL is left alone; comments are skipped; tag and attribute names
  * match case-insensitively; the file's line ending and the indentation of the neighbouring line
- * are kept.
+ * are kept. Both copy the menu's own look, so a mod's restyled menu keeps its style: the button
+ * the size of the button it follows, the panel the OPTIONS panel's window attributes, non-button
+ * children (STYLE, textures) and button column, size and spacing.
  */
 #ifndef RON_MENUFILE_H
 #define RON_MENUFILE_H

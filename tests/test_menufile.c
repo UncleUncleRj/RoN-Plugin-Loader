@@ -9,7 +9,7 @@
              "    <MAINMENU name=\"Main Menu\" title=\"Main Menu\">\r\n" \
              "      <BUTTON name=\"options_menu\" title=\"Tools &amp; Extras\" width=\"454\" height=\"35\"/>\r\n" \
              "    </MAINMENU>\r\n" \
-             "    <OPTIONS name=\"Tools &amp; Extras\" title=\"Tools &amp; Extras\" left=\"30\" top=\"40\">\r\n" \
+             "    <OPTIONS name=\"Tools &amp; Extras\" title=\"Tools &amp; Extras\" left=\"30\" top=\"40\" width=\"548\" height=\"768\">\r\n" \
              "      <POSITIONING x=\"41\" y=\"114\">\r\n" \
              "        <POSITIONING inc_y=\"36\">\r\n" \
              "          <BUTTON name=\"editor\" title=\"Scenario Editor\" width=\"454\" height=\"35\"/>\r\n"
@@ -253,4 +253,103 @@ TEST(mf_close_tags_on_one_line)
     MfWhere w;
     CHECK(run(in, &w) > strlen(in));
     CHECK(structure_ok(in));
+}
+
+/* Menu styling from mods (RON Revived's menu: a 364-wide window, 270 x 56 buttons 56 apart, its own
+   textures). The Plugins button copies the size of the button it follows; the PLUGINS panel copies
+   OPTIONS: its window attributes, its non-button children (STYLE, textures), its button size and
+   spacing, with the list areas inside the button column and the buttons inside the window. */
+#define RR_MENU "<?xml version=\"1.0\"?>\r\n<ROOT>\r\n<TOPMENU>\r\n" \
+    "    <OPTIONS name=\"Tools &amp; Extras\" title=\"Tools &amp; Extras\" left=\"30\" top=\"40\" width=\"364\" height=\"768\">\r\n" \
+    "      <STYLE CHILD=\"0\" TOP=\"1\"/>\r\n" \
+    "      <IFACETEXLOAD id=\"TEX_MOD_9\" file=\".\\art\\mod.tga\"/>\r\n" \
+    "      <IFACETEX name=\"back\" texture=\"TEX_MOD_9\" left=\"0\" top=\"0\" width=\"1024\" height=\"768\"/>\r\n" \
+    "      <POSITIONING x=\"41\" y=\"114\">\r\n        <POSITIONING inc_y=\"56\">\r\n" \
+    "          <BUTTON name=\"editor\" title=\"Editor\" width=\"270\" height=\"56\"/>\r\n" \
+    "\t\t  <BUTTON name=\"workshop\" title=\"Workshop\" width=\"270\" height=\"56\"/>\r\n" \
+    "          <BUTTON name=\"back\" title=\"Main Menu\" width=\"270\" height=\"56\"/>\r\n" \
+    "        </POSITIONING>\r\n      </POSITIONING>\r\n    </OPTIONS>\r\n</TOPMENU>\r\n</ROOT>\r\n"
+
+static const char *panel_text(void)
+{
+    static char panel[8192];
+    const char *a = strstr(g_out, "<PLUGINS"), *b = a ? strstr(a, "</PLUGINS>") : NULL;
+    panel[0] = 0;
+    if (a && b && (size_t)(b - a) < sizeof panel) {
+        memcpy(panel, a, (size_t)(b - a));
+        panel[b - a] = 0;
+    }
+    return panel;
+}
+
+TEST(mf_panel_copies_options_style)
+{
+    MfWhere w;
+    CHECK(run(RR_MENU, &w) > strlen(RR_MENU));
+    CHECK_EQ(w, MF_AFTER_WORKSHOP);
+    CHECK(strstr(g_out, "<BUTTON name=\"plugins\" title=\"Plugins\" width=\"270\" height=\"56\"/>") != NULL);
+    CHECK(strstr(g_out, "<PLUGINS name=\"Plugins\" title=\"Plugins\" left=\"30\" top=\"40\" width=\"364\" height=\"768\">") != NULL);
+    const char *p = panel_text();
+    CHECK(strstr(p, "<STYLE CHILD=\"0\" TOP=\"1\"/>") != NULL);
+    CHECK(strstr(p, "<IFACETEXLOAD id=\"TEX_MOD_9\" file=\".\\art\\mod.tga\"/>") != NULL);
+    CHECK(strstr(p, "texture=\"TEX_MOD_9\"") != NULL);
+    CHECK(strstr(p, "name=\"workshop\"") == NULL && strstr(p, "name=\"editor\"") == NULL);
+    CHECK(strstr(p, "<BUTTON name=\"plugins_up\" title=\"Move Up\" width=\"270\" height=\"56\"/>") != NULL);
+    CHECK(strstr(p, "<BUTTON name=\"back\" title=\"Back\" width=\"270\" height=\"56\"/>") != NULL);
+    CHECK(strstr(p, "inc_y=\"56\"") != NULL);
+    int pane[4] = {0}, list[4] = {0}, y = 0;
+    CHECK(rect_of("plugin_pane", pane));
+    CHECK(rect_of("plugin_list", list));
+    CHECK_EQ(pane[0], 41);
+    CHECK_EQ(pane[2], 270);
+    CHECK(list[0] >= 41 + 8 && list[0] + list[2] <= 41 + 270 - 8);
+    const char *pos = strstr(p, "<POSITIONING x=\"41\" y=\"");
+    CHECK(pos != NULL);
+    if (pos)
+        CHECK_EQ(sscanf(pos, "<POSITIONING x=\"41\" y=\"%d\"", &y), 1);
+    CHECK(y >= pane[1] + pane[3]);
+    CHECK(y + 3 * 56 + 56 <= 768);
+}
+
+TEST(mf_panel_stock_geometry)
+{
+    MfWhere w;
+    run(HEAD WORKSHOP TAIL TRIAL, &w);
+    static const struct { const char *name; int r[4]; } k[] = {
+        {"plugin_pane", {41, 114, 454, 372}},        {"plugin_list_title", {51, 118, 434, 22}},
+        {"plugin_list", {51, 140, 434, 156}},        {"plugin_description_title", {51, 300, 434, 22}},
+        {"plugin_description", {51, 322, 434, 108}}, {"plugin_notice", {51, 436, 434, 48}},
+    };
+    for (int i = 0; i < 6; i++) {
+        int r[4] = {0};
+        CHECK(rect_of(k[i].name, r));
+        CHECK(memcmp(r, k[i].r, sizeof r) == 0);
+    }
+    const char *p = panel_text();
+    CHECK(strstr(p, "<POSITIONING x=\"41\" y=\"492\">") != NULL);
+    CHECK(strstr(p, "inc_y=\"36\"") != NULL);
+    CHECK(strstr(p, "<BUTTON name=\"plugins_apply\" title=\"Apply and Restart\" width=\"454\" height=\"35\"/>") != NULL);
+}
+
+/* A narrow menu wraps the notice into more lines (the safe-start notice is about 140 characters):
+   the notice area grows to 5 lines and the list gives up the room; every area stays inside the
+   pane, in order. */
+TEST(mf_narrow_panel_room_for_notice)
+{
+    MfWhere w;
+    run(RR_MENU, &w);
+    static const char *const order[] = {"plugin_list_title", "plugin_list", "plugin_description_title",
+                                        "plugin_description", "plugin_notice"};
+    int pane[4] = {0}, r[4] = {0};
+    CHECK(rect_of("plugin_pane", pane));
+    int prev = pane[1];
+    for (int i = 0; i < 5; i++) {
+        CHECK(rect_of(order[i], r));
+        CHECK(r[1] >= prev && r[3] > 0);
+        prev = r[1] + r[3];
+    }
+    CHECK(prev <= pane[1] + pane[3]);
+    CHECK(r[3] >= 5 * 13);
+    CHECK(rect_of("plugin_list", r));
+    CHECK(r[3] >= 36 + 3 * 24);
 }

@@ -19,6 +19,7 @@
 #define TEXT_SIZE 12
 #define TEXT_DY 4      /* text top inside a 24-px row */
 #define NOTICE_LINE 13
+#define PAD       8            /* text inset inside a section */
 
 typedef void(THISCALL *RedrawFn)(void *sel);
 typedef void(THISCALL *ClickFn)(void *sel, int x, int y);
@@ -33,6 +34,14 @@ static void rect(short r[4], int l, int rt, int t, int b)
     r[1] = (short)rt;
     r[2] = (short)t;
     r[3] = (short)b;
+}
+
+/* Characters that fit across an area px wide in the panel's size-12 font, about 6.9 px each: 60 on
+   the stock 434-px list, fewer in a mod's narrower menu (the generated panel copies its width). */
+static int chars_across(int px)
+{
+    int c = (px - 2 * PAD) * 10 / 69;
+    return c < 12 ? 12 : c > 120 ? 120 : c;
 }
 
 /* Word wrap of an ASCII text into up to max lines of at most width characters. */
@@ -63,7 +72,6 @@ static int wrap_words(const char *s, char lines[][128], int max, int width)
 
 #define PANE_RGBA 0xD2000000u  /* black, alpha 0xD2: WorkshopWin::on_redraw fills its pane so (0x6AE42F) */
 #define EDGE_RGBA 0xFF646464u  /* the sections' 1-px outline */
-#define PAD       8            /* text inset inside a section */
 
 /* A 1-px outline just inside r, drawn with the fill (same batch, so in add order). */
 static void outline(const short *R)
@@ -133,7 +141,7 @@ static void draw_description(void *sel)
         return;
     outline(D);
     PanelLine lines[PANEL_DESC_LINES];
-    int n = panel_description(&g_panel, lines);
+    int n = panel_description(&g_panel, lines, chars_across(D[1] - D[0]));
     short rr[4];
     game_text_begin();
     for (int i = 0; i < n; i++) {
@@ -165,7 +173,11 @@ static void draw_list(void *sel)
     rect(rr, L[0] + PAD, L[1] - PAD, L[2] + 3, L[2] + 3 + PANEL_LINE_H);
     game_text(sel, "Top loads first.", rr, GT_LEFT, GC_GREY, TEXT_SIZE);
     rect(rr, L[0] + PAD, L[1] - PAD, L[2] + 3 + PANEL_LINE_H, L[2] + 3 + 2 * PANEL_LINE_H);
-    game_text(sel, "Lower plugins win when two change the same thing.", rr, GT_LEFT, GC_GREY, TEXT_SIZE);
+    /* the long second line where it fits (the stock width), else a short one */
+    static const char k_intro2[] = "Lower plugins win when two change the same thing.";
+    int across = chars_across(L[1] - L[0]);
+    game_text(sel, (int)sizeof k_intro2 - 1 <= across ? k_intro2 : "The lowest plugin wins.", rr, GT_LEFT, GC_GREY,
+              TEXT_SIZE);
     /* More plugins than rows fit: say so beside the intro (the wheel scrolls the list). */
     int above, below;
     panel_more(&g_panel, list_h, &above, &below);
@@ -182,7 +194,7 @@ static void draw_list(void *sel)
     }
     if (g_panel.n == 0) {
         char lines[3][128];
-        int n = wrap_words("No plugins installed. Put a plugin's .dll and .ini in the plugins folder.", lines, 3, 60);
+        int n = wrap_words("No plugins installed. Put a plugin's .dll and .ini in the plugins folder.", lines, 3, across);
         for (int i = 0; i < n; i++) {
             int y = L[2] + PANEL_INTRO_H + i * PANEL_LINE_H;
             rect(rr, L[0] + PAD, L[1] - PAD, y, y + PANEL_LINE_H);
@@ -202,8 +214,9 @@ static void draw_list(void *sel)
     const char *notice = panel_notice(&g_panel);
     const short *N = game_find_rect(sel, "plugin_notice");
     if (notice && N) {
-        char lines[3][128];
-        int k = wrap_words(notice, lines, 3, 60);
+        char lines[6][128];
+        int rows = (N[3] - N[2]) / NOTICE_LINE;
+        int k = wrap_words(notice, lines, rows < 1 ? 1 : rows > 6 ? 6 : rows, chars_across(N[1] - N[0]));
         game_text_begin();
         for (int i = 0; i < k; i++) {
             rect(rr, N[0] + PAD, N[1] - PAD, N[2] + i * NOTICE_LINE, N[2] + (i + 1) * NOTICE_LINE);

@@ -301,6 +301,13 @@ How it is built (my calls, 2026-11-24):
   to a cache file under `plugins\`, and hooks `GetTopMenuXMLFile` to return it. Without a
   `workshop` button the Plugins button goes above `back`; if anything fails, the game runs with
   its own file and no button (logged). The file service takes this over later.
+  Both additions take their look from the menu they join, so a mod that restyles the menu keeps
+  its style (user request 2026-11-25, after RON Revived's 270 x 56 buttons): the Plugins button
+  copies the size of the button it follows, and the `PLUGINS` panel copies `OPTIONS` (its window
+  attributes, its children other than buttons, such as `STYLE` and textures, and its button
+  column, size and spacing). The loader's areas sit inside that column; in a column under 400 px
+  the notice gets 5 lines and the drawn texts wrap to the width they have. On the stock menu the
+  result is byte for byte what the fixed panel was.
 - **The panel is a real menu panel.** `TopMenu::sub_menu` (`0x59C030`) runs a panel by name in a
   loop: `TopMenuSelection::exec` waits for a button, `TopMenu::check_result` (`0x59B1E0`) turns its
   name into a result, -1 stays in the panel. A hook on `check_result` answers `plugins` with
