@@ -12,15 +12,15 @@
 #include <bcrypt.h>
 #include <string.h>
 #include "bootstrap/decide.h"
+#include "bootstrap/start.h"
 #include "common/identity.h"
 #include "loader/loader.h"
 
-#define MAIN_MAIN_VA 0x560CF0u  /* Main::main, ?main@Main@@SAHPAUHINSTANCE__@@0PADH@Z */
-
-typedef int(__cdecl *MainFn)(HINSTANCE, HINSTANCE, char *, int);
+/* Main::main, ?main@Main@@SAHPAUHINSTANCE__@@0PADH@Z. Despite the name it takes the HINSTANCE in ECX,
+   so its hook is the assembly stub in start.c, never a C function. */
+#define MAIN_MAIN_VA 0x560CF0u
 
 static const uint8_t k_main_sig[5] = {0x55, 0x8B, 0xEC, 0x6A, 0xFF};  /* push ebp; mov ebp,esp; push -1 */
-static MainFn g_orig_main;
 
 /*
  * Start-up hang (seen since the Windows updates of 2026-10): SteamAPI_Init loads steamclient.dll,
@@ -32,16 +32,6 @@ static void warm_up_bcrypt(void)
 {
     unsigned char b[16];
     BCryptGenRandom(NULL, b, sizeof b, BCRYPT_USE_SYSTEM_PREFERRED_RNG);
-}
-
-static int __cdecl main_detour(HINSTANCE inst, HINSTANCE prev, char *cmd, int show)
-{
-    static int started;
-    if (!started) {
-        started = 1;
-        loader_start();
-    }
-    return g_orig_main(inst, prev, cmd, show);
 }
 
 static void patch_main(uintptr_t delta)
@@ -58,10 +48,11 @@ static void patch_main(uintptr_t delta)
     tramp[5] = 0xE9;
     memcpy(tramp + 6, &back, 4);
     FlushInstructionCache(GetCurrentProcess(), tramp, 10);
-    g_orig_main = (MainFn)(void *)tramp;
+    bs_start_orig = tramp;
+    bs_start_fn = loader_start;
 
     uint8_t jmp[5] = {0xE9};
-    int32_t to = (int32_t)((uintptr_t)main_detour - (uintptr_t)(at + 5));
+    int32_t to = (int32_t)((uintptr_t)bs_start_stub - (uintptr_t)(at + 5));
     memcpy(jmp + 1, &to, 4);
     DWORD old;
     if (!VirtualProtect(at, 5, PAGE_EXECUTE_READWRITE, &old))

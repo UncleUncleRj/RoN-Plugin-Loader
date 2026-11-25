@@ -15,6 +15,11 @@
  *    calls return RON_E_STATE. Nothing is ever unhooked.
  *  - The API is for the game's main thread (RonPluginMain and event callbacks). Plugins must not
  *    call it, or engine code, from their own threads.
+ *  - A detour must take its arguments the way the game really passes them, which is not always what
+ *    the decorated name says: the compiler gave some functions private conventions. Main::main
+ *    takes the HINSTANCE in ECX although its name says __cdecl, and Main::run_game_loop and
+ *    Main::init_menus are called with no arguments. Check the function's first instructions and a
+ *    caller before writing a detour in C; a C detour keeps no register for the code after it.
  *  - C and C++ plugins alike: the header gives RonPluginMain C linkage and every call __cdecl.
  */
 #ifndef RON_PLUGIN_H
@@ -37,6 +42,8 @@ typedef struct RonPlugin RonPlugin;   /* opaque, one per plugin */
 
 typedef enum { RON_OK = 0, RON_E_ARG, RON_E_SIG, RON_E_CONFLICT, RON_E_STATE, RON_E_MEM } RonResult;
 typedef enum { RON_EXE_UNKNOWN = 0, RON_EXE_STOCK, RON_EXE_CBP } RonExeKind;
+/* RON_EV_RENDER_FRAME fires for every drawn picture of a match (from its loading screen on), not in
+   the menus. */
 typedef enum { RON_EV_PRE_INIT, RON_EV_POST_INIT, RON_EV_MATCH_BUILT, RON_EV_SIM_FRAME,
                RON_EV_RENDER_FRAME, RON_EV_MATCH_END, RON_EV_SHUTDOWN, RON_EV_COUNT } RonEvent;
 
