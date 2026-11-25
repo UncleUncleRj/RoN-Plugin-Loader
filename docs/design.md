@@ -259,23 +259,37 @@ Rules:
   still reads `topmenu.xml` under CBP (it is not one of the five names CBP's exe renames, but CBP's
   string table might point it elsewhere).
 
-## 10. Multiplayer
+## 10. Multiplayer: every player checked before the match
 
+User decision (2026-11-24): before a match starts, every player is checked for mod and version
+information, so mismatches are caught before they can desync. Another developer is working on
+multiplayer features; agree with them on the channel below so both use one.
+
+- **What each machine publishes** whenever the loader is installed, even with no plugins (my call:
+  publishing data changes nothing in play): the loader's version; the game identity (stock or CBP
+  exe); the game's own selected mod (name, Workshop id); and every enabled plugin in load order with
+  name, version and `AffectsSim`. For simulation-changing plugins also the DLL hash and the hash of
+  every file they serve or generate.
+- **Comparison, on every machine:** simulation-changing plugins must match exactly (same plugins,
+  same order, same versions and hashes), and so must the game identity. Differences in plugins that
+  don't change the simulation are shown but don't block (my call).
+- **A player who publishes nothing** has no loader, which counts as no plugins: if anyone else has
+  simulation-changing plugins, that player is a mismatch.
+- **While anyone mismatches, the host's Start button stays disabled**, and every player sees on the
+  setup screen who differs and how. The setup screen already disables Start through
+  `SetupWin::start_button_disable` (`0x5AE570`), which finds the button by its name `start` in the
+  players panel.
+- **Channel.** The game's lobby keys are written by the host, so they can't carry each player's
+  own data. RON Revived's unit-ban feature shows the host side: `MultiplayerManager::LobbySetKey`
+  (`0xA30B70`) after `ConnectionData::send_game` (`0x94E200`), read back in
+  `GameSpy::UpdateLobbyFromDTO` (`0x962C70`). The per-player side (lobby member data, or a message
+  over the game's own network) is still to be found: reverse-engineering work that belongs to the
+  first version, shared with the multiplayer developer.
 - Each plugin declares `AffectsSim` in `plugin.ini` (and again at load).
-- A machine with no simulation-changing plugins publishes no key (my call: keeps a plugin-free game
-  identical to stock). A joiner with such plugins whose host publishes no key is warned all the same.
-- The host publishes a lobby key with the ordered list of its simulation-changing plugins: name,
-  version, DLL hash, and the hash of every file they serve or generate. RON Revived's unit-ban
-  feature already publishes its own key this way: `MultiplayerManager::LobbySetKey` (`0xA30B70`)
-  after `ConnectionData::send_game` (`0x94E200`), read back in `GameSpy::UpdateLobbyFromDTO`
-  (`0x962C70`).
-- A joining machine compares the list with its own. A mismatch shows the player what differs.
-  Preventing that player from readying up is preferred, if the setup screen allows it (to
-  investigate).
 - The game's own mod checksum does not help: nothing compares the `mod_checksum` lobby key, and
   `GameMod::compute_checksum` adds up only a mod's `.xml` files.
 - Backstop: the game checksums the whole simulation, rules data included, every turn, so a drift
-  shows up as an out-of-sync, not as silent corruption.
+  that gets past the check shows up as an out-of-sync, not as silent corruption.
 - Plugin-added script functions are numbered in the order they are added; the shared load order
   keeps the numbering equal on every machine.
 
@@ -286,9 +300,16 @@ First version
 2. API v1: log, game identity, symbol lookup, events, hooks with chaining.
 3. File service: use, folder, generate; the `CreateFileW`/`FindFirstFileExW` fallback where needed.
 4. Plugins panel (on/off, order, details, "new"/"failed" tags, apply and restart).
-5. Multiplayer lobby check.
+5. The multiplayer check of every player before the match (section 10).
 6. A hello-world plugin, tested unattended with the game's `autostart.ini` and the workspace's
    debug tool.
+
+Release (user decision, 2026-11-24): the loader first reaches players with the next RON Revived
+version, in which RON Revived is itself a plugin (that move is its own project in the mod's
+repository: hooks onto the shared hook manager, `override.c` replaced by the file service, the
+`winmm.dll` proxy retired). RON Revived's install script installs the bootstrap and the loader when
+it doesn't find them, or finds an older version (my call: "older" too), and tells players to
+uninstall old RON Revived versions.
 
 Later
 - Declared rules (`Requires`, `LoadAfter`, `Incompatible`), warnings on the panel and a "sort
@@ -301,9 +322,6 @@ Later
 - Saves and replays record the list of simulation-changing plugins (a file beside the save keeps
   the save format unchanged) and warn when loaded with a different list (my call to leave this out
   of the first version; until then a replay played without its plugins diverges silently).
-- RON Revived moves onto the loader as an ordinary plugin (its own project in the mod's
-  repository): hooks onto the shared hook manager, `override.c` replaced by the file service, the
-  `winmm.dll` proxy retired.
 - The in-game debug overlay discussed earlier becomes a plugin.
 
 ## 12. Constraints
@@ -314,9 +332,11 @@ Later
 - Engine calls only on the main thread; nothing but loading the loader under the loader lock.
 - Toolchain for the loader: zig cc `-target x86-windows-gnu`, as RON Revived (builder may change
   it with reason). Plugins: any compiler that makes a 32-bit DLL with a C export.
-- RON Revived's current `winmm.dll` installs its hooks by itself. Until it moves onto the loader,
-  the loader must detect it (a `winmm.dll` in the game folder that exports RON Revived's marker,
-  or its hooks' `jmp` bytes at known addresses) and warn rather than double-patch.
+- Old RON Revived versions install a `winmm.dll` that hooks the game by itself, before the loader
+  starts. If the loader finds one (a `winmm.dll` in the game folder that is not the system's, or its
+  hooks' `jmp` bytes at known addresses), it loads no plugins and says why on the Plugins panel and
+  in the log, rather than patching on top of it (my call). The installer's warning should make this
+  rare.
 
 ## 13. Left to the builder
 
@@ -332,6 +352,8 @@ Later
 - Which game readers bypass `String::prepend_content_dir`, and which folder listings need added
   files merged in.
 - How long parsing `rise_z.map` takes at start-up.
-- Whether the setup screen lets a mod keep a mismatched player from readying up.
+- The per-player lobby channel (section 10), and whether LAN or direct-connect games use the same
+  lobby path.
+- That disabling Start through `SetupWin::start_button_disable` holds while the lobby updates.
 - Plugin state in save games: `Game::walk_data` (`0x589600`) serves save, load and the checksum,
   but adding data there changes the save format.
