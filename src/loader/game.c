@@ -151,10 +151,12 @@ void game_tex(void *tex, int x, int y, int color)
         ((AddXYFn)VA(0x51F440))((void *)VA(IFACE_RM), tex, x, y, rgba_of(color), 1);
 }
 
-void game_fill(const short r[4], int color)
+void game_fill_rgba(const short r[4], unsigned rgba)
 {
-    ((AddRectFn)VA(0x51F3D0))((void *)VA(IFACE_RM), NULL, r, rgba_of(color), RENDER_SOLID);
+    ((AddRectFn)VA(0x51F3D0))((void *)VA(IFACE_RM), NULL, r, rgba, RENDER_SOLID);
 }
+
+void game_fill(const short r[4], int color) { game_fill_rgba(r, rgba_of(color)); }
 
 static int g_saved_depth;
 
@@ -171,13 +173,13 @@ typedef void *(THISCALL *FontGetFn)(void *family, int size, int style);         
 typedef void(THISCALL *TextColorFn)(void *buf, const void *c1, const void *c2, int a, int b);  /* ret 0x10 */
 typedef int(THISCALL *WriteFn)(void *buf, const void *str, const short *r, int len);       /* ret 0xC */
 
-int game_text(void *win, const char *utf8, const short r[4], int right, int color, int size)
+static int text(void *win, const char *utf8, const short r[4], int align, int color, int size, int style)
 {
     static wchar_t wide[512];  /* the wide constructor keeps this pointer while the String lives */
     char *buf = (char *)win + WIN_BUFFER;
     if (!utf8 || !*utf8)
         return r[0];
-    void *font = ((FontGetFn)VA(0x522810))((void *)VA(FONTS), size, -1);
+    void *font = ((FontGetFn)VA(0x522810))((void *)VA(FONTS), size, style);
     if (!font && !*(void **)(buf + BUF_FONT))
         return r[0];
     unsigned char saved[12], saved_colors[BUF_COLORS_N];
@@ -202,8 +204,9 @@ int game_text(void *win, const char *utf8, const short r[4], int right, int colo
     }
     int len = *(unsigned short *)((char *)&s + 8), x = r[0];
     if (len) {
-        int got = ((WriteFn)VA(right ? 0x50FA40 : 0x50F6E0))(buf, &s, r, len);
-        if (right)
+        uintptr_t fn = align == GT_RIGHT ? 0x50FA40 : align == GT_CENTRE ? 0x50F850 : 0x50F6E0;
+        int got = ((WriteFn)VA(fn))(buf, &s, r, len);
+        if (align == GT_RIGHT)
             x = got;
     }
     gs_close(&s);
@@ -211,3 +214,11 @@ int game_text(void *win, const char *utf8, const short r[4], int right, int colo
     memcpy(buf + BUF_COLORS, saved_colors, BUF_COLORS_N);
     return x;
 }
+
+int game_text(void *win, const char *utf8, const short r[4], int align, int color, int size)
+{
+    return text(win, utf8, r, align, color, size, -1);
+}
+
+/* PaneModManager::on_redraw 0x6AC889..0x6AC902: FontFamily::get(14, 1), write_cent_l. */
+void game_title(void *win, const char *utf8, const short r[4]) { text(win, utf8, r, GT_CENTRE, GC_WHITE, 14, 1); }

@@ -82,55 +82,92 @@ TEST(panel_move_at_edges)
     CHECK_EQ(panel_changed(p), 0);
 }
 
-TEST(panel_details_lines)
+TEST(panel_description_lines)
 {
     Panel *p = three();
-    char lines[4][128];
-    CHECK_EQ(panel_details(p, 0, lines), 4);
-    CHECK_STR(lines[0], "by Ann");
-    CHECK(strlen(lines[1]) <= PANEL_WRAP);
-    CHECK(strstr(lines[2], "abcdefghi") != NULL);
-    CHECK(strstr(lines[2], "...") == NULL);
-    CHECK_STR(lines[3], "Hooks 2 game functions.");
+    PanelLine l[PANEL_DESC_LINES];
+    panel_select(p, 0);
+    CHECK_EQ(panel_description(p, l), 6);
+    CHECK_STR(l[0].text, "A");
+    CHECK_EQ(l[0].tone, PANEL_TONE_TEXT);
+    CHECK_STR(l[1].text, "Version 1.0, by Ann");
+    CHECK_EQ(l[1].tone, PANEL_TONE_DIM);
+    CHECK(strlen(l[2].text) <= PANEL_WRAP);
+    CHECK(strstr(l[3].text, "abcdefghi") != NULL);
+    CHECK(strstr(l[3].text, "...") == NULL);
+    CHECK_STR(l[4].text, "File: A.dll");
+    CHECK_EQ(l[4].tone, PANEL_TONE_DIM);
+    CHECK_STR(l[5].text, "Hooks 2 game functions.");
 }
 
-TEST(panel_details_wraps_utf8)
+TEST(panel_description_wraps_utf8)
 {
     Panel *p = three();
     char desc[256] = "";
     for (int i = 0; i < 130 && strlen(desc) + 2 < sizeof desc; i++)
         strcat(desc, "\xC3\xA9");  /* U+00E9, two bytes */
     strcpy(p->rows[0].description, desc);
-    char lines[4][128];
-    int n = panel_details(p, 0, lines);
-    CHECK_EQ(n, 4);
-    for (int i = 1; i <= 2; i++) {
+    panel_select(p, 0);
+    PanelLine l[PANEL_DESC_LINES];
+    CHECK_EQ(panel_description(p, l), 6);
+    for (int i = 2; i <= 3; i++) {
         wchar_t w[128];
-        CHECK(MultiByteToWideChar(CP_UTF8, MB_ERR_INVALID_CHARS, lines[i], -1, w, 128) > 0);
+        CHECK(MultiByteToWideChar(CP_UTF8, MB_ERR_INVALID_CHARS, l[i].text, -1, w, 128) > 0);
     }
-    size_t l2 = strlen(lines[2]);
-    CHECK(l2 >= 3 && strcmp(lines[2] + l2 - 3, "...") == 0);
+    size_t l3 = strlen(l[3].text);
+    CHECK(l3 >= 3 && strcmp(l[3].text + l3 - 3, "...") == 0);
 }
 
-TEST(panel_details_status)
+TEST(panel_description_status)
 {
     Panel *p = three();
-    char lines[4][128];
-    int n = panel_details(p, 1, lines);
-    CHECK_EQ(n, 1);
-    CHECK_STR(lines[0], "Turned off.");
-    n = panel_details(p, 2, lines);
-    CHECK_STR(lines[n - 1], "Failed: LoadLibrary error 193");
+    PanelLine l[PANEL_DESC_LINES];
+    panel_select(p, 1);
+    int n = panel_description(p, l);
+    CHECK_EQ(n, 4);
+    CHECK_STR(l[1].text, "Version 1.0");
+    CHECK_STR(l[2].text, "File: B.dll");
+    CHECK_STR(l[3].text, "Turned off.");
+    CHECK_EQ(l[3].tone, PANEL_TONE_DIM);
+    panel_select(p, 2);
+    n = panel_description(p, l);
+    CHECK_STR(l[n - 1].text, "Failed: LoadLibrary error 193");
+    CHECK_EQ(l[n - 1].tone, PANEL_TONE_BAD);
+    panel_select(p, 0);
     p->rows[0].hooks = 1;
-    n = panel_details(p, 0, lines);
-    CHECK_STR(lines[n - 1], "Hooks 1 game function.");
+    n = panel_description(p, l);
+    CHECK_STR(l[n - 1].text, "Hooks 1 game function.");
     p->rows[0].hooks = 0;
-    n = panel_details(p, 0, lines);
-    CHECK_STR(lines[n - 1], "Hooks no game functions.");
+    n = panel_description(p, l);
+    CHECK_STR(l[n - 1].text, "Hooks no game functions.");
     p->safe_start = 1;
     p->rows[0].loaded = 0;
-    n = panel_details(p, 0, lines);
-    CHECK_STR(lines[n - 1], "Not loaded in this start.");
+    n = panel_description(p, l);
+    CHECK_STR(l[n - 1].text, "Not loaded in this start.");
+}
+
+TEST(panel_description_without_selection)
+{
+    Panel *p = three();
+    PanelLine l[PANEL_DESC_LINES];
+    panel_select(p, -1);
+    CHECK_EQ(panel_description(p, l), 1);
+    CHECK_STR(l[0].text, "Click a plugin to see its description.");
+    CHECK_EQ(l[0].tone, PANEL_TONE_DIM);
+    panel_init(&g_p, g_pl, 0, g_hooks, 0);
+    CHECK_EQ(panel_description(&g_p, l), 0);
+}
+
+TEST(panel_description_file_name_utf8)
+{
+    plugin(0, L"\x00DC" L"ber", "", "", 1, LP_LOADED, "");  /* "Über" */
+    g_hooks[0] = 0;
+    panel_init(&g_p, g_pl, 1, g_hooks, 0);
+    panel_select(&g_p, 0);
+    PanelLine l[PANEL_DESC_LINES];
+    int n = panel_description(&g_p, l);
+    CHECK(n >= 3);
+    CHECK_STR(l[n - 2].text, "File: \xC3\x9C" "ber.dll");
 }
 
 TEST(panel_hit_rows)
@@ -145,20 +182,16 @@ TEST(panel_hit_rows)
     CHECK_EQ(panel_hit(p, 328, 70, 36 + 3 * 24 + 5, &box), -1);  /* below the last row */
 }
 
-TEST(panel_hit_below_details)
+TEST(panel_selected_row_keeps_its_height)
 {
     Panel *p = three();
-    char lines[4][128];
     panel_select(p, 0);
-    CHECK_EQ(panel_details(p, 0, lines), 4);
-    int start1 = 36 + 24 + 4 * 16 + 4, box;
-    CHECK_EQ(panel_hit(p, 328, 70, start1 - 1, &box), 0);  /* inside row 0's details */
-    CHECK_EQ(box, 0);
-    CHECK_EQ(panel_hit(p, 328, 70, start1 + 1, &box), 1);
     PanelSlot s[ORDER_MAX];
     CHECK_EQ(panel_layout(p, 328, s, ORDER_MAX), 3);
-    CHECK_EQ(s[1].y, start1);
-    CHECK_EQ(s[0].h, 24 + 4 * 16 + 4);
+    CHECK_EQ(s[0].h, 24);
+    CHECK_EQ(s[1].y, 36 + 24);
+    int box;
+    CHECK_EQ(panel_hit(p, 328, 70, 36 + 24 + 5, &box), 1);
 }
 
 TEST(panel_hit_scrolled)

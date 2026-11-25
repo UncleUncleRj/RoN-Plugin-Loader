@@ -1,9 +1,11 @@
 /*
  * The Plugins panel's list (menu_draw.h; plan task 6): drawn after the game's own drawing of the
- * panel, in the IFACERECT "plugin_list" the generated panel declares, in the Steam Workshop window's
- * style (ledger draw F8, F9): WHITE rows when on, GREY when off, the selected row filled with its
- * colour and written in BLACK, the Workshop check boxes. Clicks and the wheel act on the same layout
- * (panel_layout / panel_hit). The modal loop redraws every frame, so no invalidation is needed.
+ * panel, in the IFACERECTs the generated panel declares, in the Steam Workshop window's style
+ * (ledger draw F8, F9, F13): a dark pane (the Workshop's 0xD2000000), section titles in its title
+ * font, a Load Order list (WHITE rows when on, GREY when off, the selected row filled with its colour
+ * and written in BLACK, the Workshop check boxes) and a Description box for the selected row. Clicks
+ * and the wheel act on the same layout (panel_layout / panel_hit). The modal loop redraws every
+ * frame, so no invalidation is needed.
  */
 #include <stdio.h>
 #include <stdlib.h>
@@ -58,6 +60,34 @@ static int wrap_words(const char *s, char lines[][128], int max, int width)
     return n;
 }
 
+#define PANE_RGBA 0xD2000000u  /* black, alpha 0xD2: WorkshopWin::on_redraw fills its pane so (0x6AE42F) */
+#define EDGE_RGBA 0xFF646464u  /* the sections' 1-px outline */
+#define PAD       8            /* text inset inside a section */
+
+/* A 1-px outline just inside r, drawn with the fill (same batch, so in add order). */
+static void outline(const short *R)
+{
+    short e[4];
+    rect(e, R[0], R[1], R[2], R[2] + 1);
+    game_fill_rgba(e, EDGE_RGBA);
+    rect(e, R[0], R[1], R[3] - 1, R[3]);
+    game_fill_rgba(e, EDGE_RGBA);
+    rect(e, R[0], R[0] + 1, R[2], R[3]);
+    game_fill_rgba(e, EDGE_RGBA);
+    rect(e, R[1] - 1, R[1], R[2], R[3]);
+    game_fill_rgba(e, EDGE_RGBA);
+}
+
+static void title(void *sel, const char *rect_name, const char *text)
+{
+    const short *T = game_find_rect(sel, rect_name);
+    if (!T)
+        return;
+    game_text_begin();
+    game_title(sel, text, T);
+    game_text_end();
+}
+
 static void draw_row(void *sel, const short *L, const PanelSlot *slot, void *box_off, void *box_on)
 {
     const PanelRow *r = &g_panel.rows[slot->row];
@@ -69,7 +99,7 @@ static void draw_row(void *sel, const short *L, const PanelSlot *slot, void *box
     char num[16];
 
     if (selected) {
-        rect(rr, left, right, top, top + PANEL_ROW_H);
+        rect(rr, left + 1, right - 1, top, top + PANEL_ROW_H);
         game_fill(rr, color);
     }
 
@@ -82,48 +112,66 @@ static void draw_row(void *sel, const short *L, const PanelSlot *slot, void *box
         game_tex(box_on, left + PANEL_BOX_X, top + 1, GC_WHITE);
     snprintf(num, sizeof num, "%d", slot->row + 1);
     rect(rr, left, left + PANEL_BOX_X - 4, top + TEXT_DY, top + PANEL_ROW_H);
-    game_text(sel, num, rr, 1, ink, TEXT_SIZE);
-    rect(rr, left + PANEL_NAME_X, right - 4, top + TEXT_DY, top + PANEL_ROW_H);
-    int edge = game_text(sel, r->version, rr, 1, ink, TEXT_SIZE);
+    game_text(sel, num, rr, GT_RIGHT, ink, TEXT_SIZE);
+    rect(rr, left + PANEL_NAME_X, right - PAD, top + TEXT_DY, top + PANEL_ROW_H);
+    int edge = game_text(sel, r->version, rr, GT_RIGHT, ink, TEXT_SIZE);
     const char *tag = r->failed ? "failed" : r->is_new ? "new" : NULL;
     if (tag) {
         rect(rr, left + PANEL_NAME_X, edge - 10, top + TEXT_DY, top + PANEL_ROW_H);
-        edge = game_text(sel, tag, rr, 1, selected ? GC_BLACK : r->failed ? GC_RED : GC_YELLOW, TEXT_SIZE);
+        edge = game_text(sel, tag, rr, GT_RIGHT, selected ? GC_BLACK : r->failed ? GC_RED : GC_YELLOW, TEXT_SIZE);
     }
     rect(rr, left + PANEL_NAME_X, edge - 10, top + TEXT_DY, top + PANEL_ROW_H);
-    game_text(sel, r->name, rr, 0, ink, TEXT_SIZE);
-    if (selected) {
-        char lines[4][128];
-        int n = panel_details(&g_panel, slot->row, lines);
-        for (int i = 0; i < n; i++) {
-            int y = top + PANEL_ROW_H + 2 + i * PANEL_LINE_H;
-            rect(rr, left + PANEL_NAME_X, right - 4, y, y + PANEL_LINE_H);
-            game_text(sel, lines[i], rr, 0, GC_GREY, TEXT_SIZE);
-        }
+    game_text(sel, r->name, rr, GT_LEFT, ink, TEXT_SIZE);
+    game_text_end();
+}
+
+static void draw_description(void *sel)
+{
+    const short *D = game_find_rect(sel, "plugin_description");
+    if (!D)
+        return;
+    outline(D);
+    PanelLine lines[PANEL_DESC_LINES];
+    int n = panel_description(&g_panel, lines);
+    short rr[4];
+    game_text_begin();
+    for (int i = 0; i < n; i++) {
+        int y = D[2] + 6 + i * PANEL_LINE_H;
+        int tone = lines[i].tone;
+        rect(rr, D[0] + PAD, D[1] - PAD, y, y + PANEL_LINE_H);
+        game_text(sel, lines[i].text, rr, GT_LEFT,
+                  tone == PANEL_TONE_BAD ? GC_RED : tone == PANEL_TONE_DIM ? GC_GREY : GC_WHITE, TEXT_SIZE);
     }
     game_text_end();
 }
 
 static void draw_list(void *sel)
 {
+    const short *P = game_find_rect(sel, "plugin_pane");
+    if (P)
+        game_fill_rgba(P, PANE_RGBA);
+    title(sel, "plugin_list_title", "Load Order");
+    title(sel, "plugin_description_title", "Description");
+
     const short *L = game_find_rect(sel, "plugin_list");
     if (!L)
         return;
+    outline(L);
     int list_h = L[3] - L[2];
     short rr[4];
 
     game_text_begin();
-    rect(rr, L[0], L[1], L[2], L[2] + PANEL_LINE_H);
-    game_text(sel, "Top loads first.", rr, 0, GC_GREY, TEXT_SIZE);
-    rect(rr, L[0], L[1], L[2] + PANEL_LINE_H, L[2] + 2 * PANEL_LINE_H);
-    game_text(sel, "Lower plugins win when two change the same thing.", rr, 0, GC_GREY, TEXT_SIZE);
+    rect(rr, L[0] + PAD, L[1] - PAD, L[2] + 3, L[2] + 3 + PANEL_LINE_H);
+    game_text(sel, "Top loads first.", rr, GT_LEFT, GC_GREY, TEXT_SIZE);
+    rect(rr, L[0] + PAD, L[1] - PAD, L[2] + 3 + PANEL_LINE_H, L[2] + 3 + 2 * PANEL_LINE_H);
+    game_text(sel, "Lower plugins win when two change the same thing.", rr, GT_LEFT, GC_GREY, TEXT_SIZE);
     if (g_panel.n == 0) {
         char lines[3][128];
         int n = wrap_words("No plugins installed. Put a plugin's .dll and .ini in the plugins folder.", lines, 3, 60);
         for (int i = 0; i < n; i++) {
             int y = L[2] + PANEL_INTRO_H + i * PANEL_LINE_H;
-            rect(rr, L[0], L[1], y, y + PANEL_LINE_H);
-            game_text(sel, lines[i], rr, 0, GC_GREY, TEXT_SIZE);
+            rect(rr, L[0] + PAD, L[1] - PAD, y, y + PANEL_LINE_H);
+            game_text(sel, lines[i], rr, GT_LEFT, GC_GREY, TEXT_SIZE);
         }
     }
     game_text_end();
@@ -134,6 +182,8 @@ static void draw_list(void *sel)
     for (int i = 0; i < n; i++)
         draw_row(sel, L, &slots[i], box_off, box_on);
 
+    draw_description(sel);
+
     const char *notice = panel_notice(&g_panel);
     const short *N = game_find_rect(sel, "plugin_notice");
     if (notice && N) {
@@ -141,8 +191,8 @@ static void draw_list(void *sel)
         int k = wrap_words(notice, lines, 3, 60);
         game_text_begin();
         for (int i = 0; i < k; i++) {
-            rect(rr, N[0], N[1], N[2] + i * NOTICE_LINE, N[2] + (i + 1) * NOTICE_LINE);
-            game_text(sel, lines[i], rr, 0, GC_YELLOW, TEXT_SIZE);
+            rect(rr, N[0] + PAD, N[1] - PAD, N[2] + i * NOTICE_LINE, N[2] + (i + 1) * NOTICE_LINE);
+            game_text(sel, lines[i], rr, GT_LEFT, GC_YELLOW, TEXT_SIZE);
         }
         game_text_end();
     }

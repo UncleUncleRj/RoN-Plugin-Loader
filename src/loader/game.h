@@ -30,15 +30,19 @@ void game_click(void);                                /* the menu buttons' click
 
 /* Drawing, in a window's own coordinates (ledger draw F1-F9). Rects are short left, right, top, bottom. */
 enum { GC_WHITE, GC_GREY, GC_RED, GC_YELLOW, GC_BLACK };
+enum { GT_LEFT, GT_RIGHT, GT_CENTRE };
 const short *game_find_rect(void *win, const char *name);  /* an IFACERECT of the window's XML, or NULL */
 void *game_find_tex(void *win, const char *name);          /* an IFACETEX of the window's XML, or NULL */
 void game_tex(void *tex, int x, int y, int color);         /* IFaceRenderManager::add, at its own size */
 void game_fill(const short r[4], int color);               /* IFaceRenderManager::add, solid */
+void game_fill_rgba(const short r[4], unsigned rgba);      /* the same with any colour, 0xAABBGGRR */
 void game_text_begin(void);                                /* what follows draws in front of the textures and
                                                               fills added before: depth + 1 */
 void game_text_end(void);
-/* utf8 in rect r (left or right aligned), size 12-ish, colour GC_*; returns the text's left x when
-   right aligned, else r[0]. */
-int game_text(void *win, const char *utf8, const short r[4], int right, int color, int size);
+/* utf8 in rect r, aligned GT_*, size 12-ish, colour GC_*; returns the text's left x when right
+   aligned, else r[0]. */
+int game_text(void *win, const char *utf8, const short r[4], int align, int color, int size);
+/* A section title as the Workshop draws them: font (14, 1), white, centred in r (ledger draw F13). */
+void game_title(void *win, const char *utf8, const short r[4]);
 
 #endif

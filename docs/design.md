@@ -215,19 +215,33 @@ installed. Same place and frame as the game's Solo, Multiplayer and Tools & Extr
 (`left="30" top="40" width="548" height="768"`, buttons at `x="41"`, 36 apart), over the moving
 menu background.
 
+User decisions (2026-11-25, after the first look in the game): the panel gets a dark background,
+and, like the Steam Workshop window's sections, the selected plugin's information moves out of the
+list into its own **Description** box, which also shows the plugin's exact file name.
+
 ```
 +------------------------------------------+
 | Plugins                                  |
-| Top loads first. Lower plugins win when  |
-| two change the same thing.               |
-|  1 [x] RON Revived     2026.11.24        |
-|  2 [x] Nations Pack    1.0     failed    |
-|  3 [x] Better Minimap  1.2     new       |   <- selected
-|        by Someone. Shows ... (description)
-|        Hooks 3 game functions.           |
-|  4 [ ] Debug Tools     0.3               |
-| Order changed. The game restarts to      |
-| apply it.                                |
+| ######## dark pane (Workshop 0xD2000000) |
+|               Load Order                 |
+| +--------------------------------------+ |
+| | Top loads first. Lower plugins win   | |
+| | when two change the same thing.      | |
+| |  1 [x] RON Revived     2026.11.24    | |
+| |  2 [x] Nations Pack    1.0   failed  | |
+| |  3 [x] Better Minimap  1.2   new     | |  <- selected
+| |  4 [ ] Debug Tools     0.3           | |
+| +--------------------------------------+ |
+|               Description                |
+| +--------------------------------------+ |
+| | Better Minimap                       | |
+| | Version 1.2, by Someone              | |
+| | Shows ... (description, 2 lines)     | |
+| | File: BetterMinimap.dll              | |
+| | Hooks 3 game functions.              | |
+| +--------------------------------------+ |
+| Not applied yet. Apply and Restart to    |
+| use this list.                           |
 | [ Move Up                              ] |
 | [ Move Down                            ] |
 | [ Apply and Restart                    ] |
@@ -239,9 +253,15 @@ menu background.
 - Each row: load-order number, check box, name, version, and a tag: "new" (appended to the order
   at this start) or "failed" (enabled but did not load). Clicking a row selects it; clicking its
   check box turns that plugin on or off.
-- The selected row unfolds its details: author and description from its ini; how many game
-  functions it hooked in this run; why it failed, if it did. How many files it serves joins them
-  once the file service exists.
+- The **Description** box shows the selected plugin: its name; version and author, description
+  (2 lines, "..." when cut) from its ini; its file (`<id>.dll`); and its status: how many game
+  functions it hooked in this run, or why it failed, or that it is off or not loaded in a safe
+  start. With nothing selected it says "Click a plugin to see its description." How many files it
+  serves joins them once the file service exists.
+- Look of the sections (my calls, after the Workshop: `WorkshopWin::on_redraw` fills its pane
+  black at alpha `0xD2`, `PaneModManager::on_redraw` writes its section titles with
+  `FontFamily::get(14, 1)` centred): one dark pane from the panel's first row to above its
+  buttons, a centred title and a 1-px grey outline per section, the notice at the pane's foot.
 - **Move Up** and **Move Down** move the selected plugin one place (the Steam Workshop window's
   Priority Up and Priority Down; my call, in place of the arrows on every row of the first sketch).
 - When more plugins exist than rows fit, the list scrolls (mouse wheel; more is the builder's call).

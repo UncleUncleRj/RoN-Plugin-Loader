@@ -13,11 +13,12 @@
 
 #define PANEL_INTRO_H 36   /* intro: two 16-px lines and a 4-px gap above the first row */
 #define PANEL_ROW_H   24
-#define PANEL_LINE_H  16   /* one details line */
+#define PANEL_LINE_H  16   /* one line of the description box */
 #define PANEL_BOX_X   28   /* check box, from the list's left edge; 25 x 22, vertically centred in the row */
 #define PANEL_BOX_W   25
 #define PANEL_NAME_X  60
 #define PANEL_WRAP    60   /* characters per description line, at most 2 lines, "..." when cut */
+#define PANEL_DESC_LINES 6 /* name; version and author; description (2); file; status */
 
 typedef struct PanelRow {
     wchar_t id[64];
@@ -32,6 +33,13 @@ typedef struct Panel {
     int start_enabled[ORDER_MAX];
 } Panel;
 
+enum { PANEL_TONE_TEXT, PANEL_TONE_DIM, PANEL_TONE_BAD };
+
+typedef struct PanelLine {
+    char text[128];  /* UTF-8 */
+    int tone;        /* PANEL_TONE_* */
+} PanelLine;
+
 typedef struct PanelSlot {
     int row, y, h;  /* y from the list's top */
 } PanelSlot;
@@ -41,7 +49,7 @@ void panel_select(Panel *p, int row);           /* -1 clears */
 void panel_toggle(Panel *p, int row);
 int panel_move(Panel *p, int delta);            /* the selected row, -1 up / +1 down; 1 if it moved */
 int panel_changed(const Panel *p);
-int panel_details(const Panel *p, int row, char lines[4][128]);         /* the line count */
+int panel_description(const Panel *p, PanelLine out[PANEL_DESC_LINES]);  /* the selected row's, or a hint; the line count */
 int panel_layout(const Panel *p, int list_h, PanelSlot *out, int max);  /* visible rows only */
 int panel_hit(const Panel *p, int list_h, int x, int y, int *on_box);   /* row or -1 */
 void panel_scroll(Panel *p, int list_h, int notches);                   /* positive = toward row 0 */

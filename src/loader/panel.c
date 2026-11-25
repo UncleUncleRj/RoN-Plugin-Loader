@@ -1,3 +1,4 @@
+#include <windows.h>
 #include <stdio.h>
 #include <string.h>
 #include "loader/panel.h"
@@ -126,27 +127,53 @@ static int wrap(const char *s, char lines[][128])
     return 2;
 }
 
-int panel_details(const Panel *p, int row, char lines[4][128])
+static void line(PanelLine *l, int tone, const char *fmt, const char *a, const char *b)
 {
-    if (row < 0 || row >= p->n)
+    snprintf(l->text, sizeof l->text, fmt, a, b);
+    l->tone = tone;
+}
+
+int panel_description(const Panel *p, PanelLine out[PANEL_DESC_LINES])
+{
+    if (p->n <= 0)
         return 0;
-    const PanelRow *r = &p->rows[row];
+    if (p->selected < 0 || p->selected >= p->n) {
+        line(&out[0], PANEL_TONE_DIM, "%s%s", "Click a plugin to see its description.", "");
+        return 1;
+    }
+    const PanelRow *r = &p->rows[p->selected];
     int n = 0;
-    if (r->author[0])
-        snprintf(lines[n++], 128, "by %s", r->author);
-    n += wrap(r->description, lines + n);
+    line(&out[n++], PANEL_TONE_TEXT, "%s%s", r->name, "");
+    if (r->version[0] && r->author[0])
+        line(&out[n++], PANEL_TONE_DIM, "Version %s, by %s", r->version, r->author);
+    else if (r->version[0])
+        line(&out[n++], PANEL_TONE_DIM, "Version %s%s", r->version, "");
+    else if (r->author[0])
+        line(&out[n++], PANEL_TONE_DIM, "By %s%s", r->author, "");
+    char d[2][128];
+    int k = wrap(r->description, d);
+    for (int i = 0; i < k; i++)
+        line(&out[n++], PANEL_TONE_TEXT, "%s%s", d[i], "");
+    char file[100];
+    if (WideCharToMultiByte(CP_UTF8, 0, r->id, -1, file, sizeof file, NULL, NULL) <= 0)
+        file[0] = 0;
+    line(&out[n++], PANEL_TONE_DIM, "File: %s.dll%s", file, "");
+    char hooks[48];
     if (r->failed)
-        snprintf(lines[n++], 128, "Failed: %s", r->reason);
+        line(&out[n++], PANEL_TONE_BAD, "Failed: %s%s", r->reason, "");
     else if (!r->enabled)
-        snprintf(lines[n++], 128, "Turned off.");
+        line(&out[n++], PANEL_TONE_DIM, "%s%s", "Turned off.", "");
     else if (p->safe_start && !r->loaded)
-        snprintf(lines[n++], 128, "Not loaded in this start.");
-    else if (r->hooks == 0)
-        snprintf(lines[n++], 128, "Hooks no game functions.");
-    else if (r->hooks == 1)
-        snprintf(lines[n++], 128, "Hooks 1 game function.");
-    else
-        snprintf(lines[n++], 128, "Hooks %d game functions.", r->hooks);
+        line(&out[n++], PANEL_TONE_DIM, "%s%s", "Not loaded in this start.", "");
+    else {
+        if (r->hooks == 0)
+            snprintf(hooks, sizeof hooks, "Hooks no game functions.");
+        else if (r->hooks == 1)
+            snprintf(hooks, sizeof hooks, "Hooks 1 game function.");
+        else
+            snprintf(hooks, sizeof hooks, "Hooks %d game functions.", r->hooks);
+        line(&out[n++], PANEL_TONE_DIM, "%s%s", hooks, "");
+    }
     return n;
 }
 
@@ -157,10 +184,6 @@ int panel_layout(const Panel *p, int list_h, PanelSlot *out, int max)
         if (y + PANEL_ROW_H > list_h)
             break;
         int h = PANEL_ROW_H;
-        if (i == p->selected) {
-            char l[4][128];
-            h += panel_details(p, i, l) * PANEL_LINE_H + 4;
-        }
         out[k].row = i;
         out[k].y = y;
         out[k].h = h;

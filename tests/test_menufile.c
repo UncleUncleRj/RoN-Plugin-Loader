@@ -165,3 +165,36 @@ TEST(mf_list_inset_from_frame)
             CHECK(t >= 114 + 4);
     }
 }
+
+/* The panel's dark pane holds, top to bottom: the Load Order title and list, the Description title
+   and box, and the notice; all inside the pane, none overlapping, and the pane ends above the
+   panel's buttons (POSITIONING y 492). */
+static int rect_of(const char *name, int r[4])
+{
+    char key[64];
+    snprintf(key, sizeof key, "name=\"%s\"", name);
+    const char *p = strstr(g_out, key);
+    return p && sscanf(p + strlen(key), " left=\"%d\" top=\"%d\" width=\"%d\" height=\"%d\"", &r[0], &r[1], &r[2], &r[3]) == 4;
+}
+
+TEST(mf_panel_sections)
+{
+    MfWhere w;
+    run(HEAD WORKSHOP TAIL TRIAL, &w);
+    CHECK(strstr(g_out, "<POSITIONING x=\"41\" y=\"492\">") != NULL);
+    int pane[4] = {0};
+    CHECK(rect_of("plugin_pane", pane));
+    CHECK(pane[1] + pane[3] <= 492);
+    static const char *const order[] = {"plugin_list_title", "plugin_list", "plugin_description_title",
+                                        "plugin_description", "plugin_notice"};
+    int prev_bottom = pane[1];
+    for (int i = 0; i < 5; i++) {
+        int r[4] = {0};
+        CHECK(rect_of(order[i], r));
+        CHECK(r[0] >= pane[0] && r[0] + r[2] <= pane[0] + pane[2]);
+        CHECK(r[1] >= prev_bottom);
+        CHECK(r[3] > 0);
+        prev_bottom = r[1] + r[3];
+    }
+    CHECK(prev_bottom <= pane[1] + pane[3]);
+}
