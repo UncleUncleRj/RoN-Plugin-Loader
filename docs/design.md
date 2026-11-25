@@ -147,8 +147,8 @@ function pointers (no C++ ABI across the boundary). Version 1 provides:
 - **Game identity**: stock exe or CBP's `riseofnations_CBP.exe` (same TimeDateStamp; CBP's has an
   extra executable section `.cbp`), the ASLR delta, the game folder.
 - **Symbol lookup**: `api->sym("<decorated name>")` from `sbl\rise_z.map`, checked against the
-  map header's `Timestamp is 6674863f`, corrected for ASLR. Parse cost is unmeasured; if it is
-  slow, cache an index keyed on the timestamp.
+  map header's `Timestamp is 6674863f`, corrected for ASLR. Measured in the first game runs
+  (2026-11-24): 111,091 names in 34-41 ms at start-up, so no cached index is needed.
 - **Hooks** (section 7).
 - **Byte patches** (my call): address, expected stock bytes, new bytes; checked and recorded like
   hooks, so a plugin never writes game memory out of the loader's sight (RON Revived uses a
@@ -161,10 +161,10 @@ function pointers (no C++ ABI across the boundary). Version 1 provides:
 | `pre_init` | `Main::main` entry (`0x560CF0`) | Plugins load here; register files and hooks |
 | `post_init` | after `Main::init_menus` (`0x595BE0`) | Renderer, sound and menus are up |
 | `match_built` | after `Setup::build_game` (`0x5AC190`) | Map, empires and scenario script ready |
-| `sim_frame` | `Game::do_frame` (`0x591EF0`) | One simulation frame (1/15 s of game time) |
+| `sim_frame` | the only call of `Game::do_frame` (`0x591EF0`), at `Game::loop+0x14E` (`0x5916BE`) | One simulation frame (1/15 s of game time). A call-site hook, so a tool that hooks `do_frame`'s entry (a Frida agent does) doesn't silence it |
 | `render_frame` | `Game::loop_render` (`0x5917E0`) | Once per drawn picture |
-| `match_end` | `Game::close` (`0x594B80`) | |
-| `shutdown` | `Main::shutdown` (`0x5966A0`) | |
+| `match_end` | `Game::close` (`0x594B80`) | Once per match: the first `Game::close` after `match_built`. The game also calls `Game::close` to clear before it builds a match, and twice when a match ends (`Game::run`) |
+| `shutdown` | the return of `Main::run_game_loop`, called once at `Main::main+0x913` (`0x561603`) | `Main::shutdown` (`0x5966A0`) is not reached on a console quit: a trace showed the process ending inside `SteamAuthentication` (Get, CancelSteamAuthTicket) first, in a run with Steam kept out |
 
 Events fire in load order. Plugins must not call engine code from their own threads.
 
@@ -235,7 +235,10 @@ same place and frame as the game's Solo, Multiplayer and Options panels (`topmen
 - Restarting: write the file, start a new game process the way the current one was started, then
   quit through the game's own exit path (so settings are saved). Whether to relaunch the exe
   directly or through Steam (`steam://rungameid/287450`) must be tested; the new process must not
-  start while the old one still holds the single-instance lock, if there is one.
+  start while the old one still holds the single-instance lock, if there is one. Lead: the game
+  has a self-restart of its own. `WinMain` opens a mutex named `RiseOfNationsRestart` and waits on it
+  up to 8 s at start-up, and calls `handleSelfRestartAndFinalShutdown` (`0x560A40`) after
+  `Main::main` returns (then `TerminateProcess`); read it before writing our own relaunch.
 
 ## 9. Files from plugins
 
@@ -381,7 +384,6 @@ Later
   `CrossplayNetLib` really calls `SHGetFolderPathW`, so the forward must be exact.
 - Which game readers bypass `String::prepend_content_dir`, and which folder listings need added
   files merged in.
-- How long parsing `rise_z.map` takes at start-up.
 - The per-player lobby channel (section 10), and whether LAN or direct-connect games use the same
   lobby path.
 - That disabling Start through `SetupWin::start_button_disable` holds while the lobby updates.

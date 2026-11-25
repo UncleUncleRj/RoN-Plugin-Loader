@@ -15,6 +15,7 @@ typedef struct Callback {
 static Callback g_cb[MAX_CALLBACKS];  /* kept sorted by owner, then registration order */
 static int g_ncb;
 static int g_locked;
+static int g_match_open;  /* a match was built and has not ended yet */
 
 RonResult ev_register(int owner, RonEvent ev, RonEventFn fn, void *user)
 {
@@ -61,6 +62,7 @@ void ev_reset(void)
 {
     g_ncb = 0;
     g_locked = 0;
+    g_match_open = 0;
 }
 
 /* ---- the loader's hooks on game functions ----
@@ -68,14 +70,18 @@ void ev_reset(void)
 static const GameHook k_hooks[6] = {
     {RON_EV_POST_INIT, 0x595BE0, {0x55, 0x8B, 0xEC, 0x6A, 0xFF}, {1, 1, 1, 1, 1}, 5, 5},
     {RON_EV_MATCH_BUILT, 0x5AC190, {0x53, 0x8B, 0xDC, 0x83, 0xEC, 0x08}, {1, 1, 1, 1, 1, 1}, 6, 6},
-    {RON_EV_SIM_FRAME, 0x591EF0, {0x55, 0x8B, 0xEC, 0x6A, 0xFF}, {1, 1, 1, 1, 1}, 5, 5},
+    /* Game::do_frame (0x591EF0) has one caller, Game::loop+0x14E: hooking that call instead of the
+       function's entry keeps sim_frame working when a tool has hooked the entry (rondbg's agent does) */
+    {RON_EV_SIM_FRAME, 0x5916BE, {0xE8}, {1}, 1, 0, 1},
     {RON_EV_RENDER_FRAME, 0x5917E0, {0x55, 0x8B, 0xEC, 0x83, 0x3D, 0, 0, 0, 0, 0x00},
      {1, 1, 1, 1, 1, 0, 0, 0, 0, 1}, 10, 10},
     {RON_EV_MATCH_END, 0x594B80, {0x53, 0x8B, 0xDC, 0x83, 0xEC, 0x08}, {1, 1, 1, 1, 1, 1}, 6, 6},
-    {RON_EV_SHUTDOWN, 0x5966A0, {0x57, 0x8B, 0xF9, 0xB9, 0, 0, 0, 0}, {1, 1, 1, 1, 0, 0, 0, 0}, 8, 8},
+    /* the call of Main::run_game_loop in Main::main (Main::main+0x913): it returns on quit. Main::shutdown
+       itself is not reached on quit: the process ends in SteamAuthentication first (traced) */
+    {RON_EV_SHUTDOWN, 0x561603, {0xE8}, {1}, 1, 0, 1},
 };
-static const char *const k_names[6] = {"Main::init_menus",  "Setup::build_game", "Game::do_frame",
-                                       "Game::loop_render", "Game::close",       "Main::shutdown"};
+static const char *const k_names[6] = {"Main::init_menus",  "Setup::build_game", "Game::loop -> Game::do_frame",
+                                       "Game::loop_render", "Game::close",       "Main::main -> Main::run_game_loop"};
 
 #define THISCALL __attribute__((thiscall))
 
@@ -84,14 +90,14 @@ typedef int(THISCALL *BuildGameFn)(void *self, int a, int b, int c);
 typedef void(THISCALL *DoFrameFn)(void *self);
 typedef int(THISCALL *LoopRenderFn)(void *self, int a, int b);
 typedef void(THISCALL *CloseFn)(void *self, int a);
-typedef void(THISCALL *ShutdownFn)(void *ecx, int a);  /* static, but its code reads ecx on entry */
+typedef int(__cdecl *RunGameLoopFn)(int);  /* static int Main::run_game_loop(int) */
 
 static InitMenusFn o_init_menus;
 static BuildGameFn o_build_game;
 static DoFrameFn o_do_frame;
 static LoopRenderFn o_loop_render;
 static CloseFn o_close;
-static ShutdownFn o_shutdown;
+static RunGameLoopFn o_run_game_loop;
 
 static void __cdecl d_init_menus(unsigned int *a)
 {
@@ -102,7 +108,7 @@ static void __cdecl d_init_menus(unsigned int *a)
 static int THISCALL d_build_game(void *self, int a, int b, int c)
 {
     int r = o_build_game(self, a, b, c);
-    ev_fire(RON_EV_MATCH_BUILT, self);
+    ev_match_built(self);
     return r;
 }
 
@@ -121,14 +127,29 @@ static int THISCALL d_loop_render(void *self, int a, int b)
 
 static void THISCALL d_close(void *self, int a)
 {
-    ev_fire(RON_EV_MATCH_END, self);
+    ev_game_closed(self);
     o_close(self, a);
 }
 
-static void THISCALL d_shutdown(void *ecx, int a)
+static int __cdecl d_run_game_loop(int a)
 {
+    int r = o_run_game_loop(a);
     ev_fire(RON_EV_SHUTDOWN, NULL);
-    o_shutdown(ecx, a);
+    return r;
+}
+
+void ev_match_built(void *setup)
+{
+    g_match_open = 1;
+    ev_fire(RON_EV_MATCH_BUILT, setup);
+}
+
+void ev_game_closed(void *game)
+{
+    if (!g_match_open)
+        return;
+    g_match_open = 0;
+    ev_fire(RON_EV_MATCH_END, game);
 }
 
 const GameHook *ev_game_hooks(int *count)
@@ -141,13 +162,15 @@ const GameHook *ev_game_hooks(int *count)
 int ev_install_game_hooks(uintptr_t delta)
 {
     void *const detours[6] = {(void *)d_init_menus, (void *)d_build_game, (void *)d_do_frame,
-                              (void *)d_loop_render, (void *)d_close,     (void *)d_shutdown};
+                              (void *)d_loop_render, (void *)d_close,     (void *)d_run_game_loop};
     void **const origs[6] = {(void **)&o_init_menus, (void **)&o_build_game, (void **)&o_do_frame,
-                             (void **)&o_loop_render, (void **)&o_close,     (void **)&o_shutdown};
+                             (void **)&o_loop_render, (void **)&o_close,     (void **)&o_run_game_loop};
     int ok = 0;
     for (int i = 0; i < 6; i++) {
         const GameHook *h = &k_hooks[i];
-        RonResult r = hm_inline(0, h->va + delta, h->sig, h->mask, h->sig_len, h->stolen, detours[i], origs[i]);
+        RonResult r = h->call_site
+                          ? hm_call(0, h->va + delta, detours[i], origs[i])
+                          : hm_inline(0, h->va + delta, h->sig, h->mask, h->sig_len, h->stolen, detours[i], origs[i]);
         if (r == RON_OK)
             ok++;
         else
