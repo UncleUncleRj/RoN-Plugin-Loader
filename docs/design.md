@@ -71,8 +71,10 @@ manager); **the panel in the main-menu column was chosen** (section 8).
    at process start, before Steam and before the crossplay threads start. It exports only
    `SHGetFolderPathA` and `SHGetFolderPathW`, forwarded to `shell32` through a `.def` (the system
    `shfolder.dll` is a thin wrapper around the same two shell32 functions). Measured: it loads
-   even when an AppCompat layer makes the System32 `winmm.dll` win. `DllMain` only loads the
-   loader DLL and installs one hook (below); nothing else runs under the loader lock.
+   even when an AppCompat layer makes the System32 `winmm.dll` win. `DllMain` only checks the
+   exe, warms up bcrypt (below) and patches a `jmp` at `Main::main`; that hook loads the loader
+   DLL. Nothing else runs under the loader lock (corrected 2026-11-24: the first draft had
+   `DllMain` load the loader DLL, which would call `LoadLibrary` under the loader lock).
 2. **Loader**: `RonPluginLoader.dll` (name: builder's call) in the game folder. All work runs on
    the game's main thread from a hook at the entry of `Main::main` (`0x560CF0`), which runs
    before `Main::init` (Steam, at `+0x24`), the game's mod scan (`+0x29`) and any data load. A
@@ -329,7 +331,8 @@ Later
 - 32-bit x86 only; the exe's TimeDateStamp must be `0x6674863F` (stock or CBP), otherwise the
   loader loads no plugins and says so.
 - ASLR: every address is applied with the load delta.
-- Engine calls only on the main thread; nothing but loading the loader under the loader lock.
+- Engine calls only on the main thread. Under the loader lock only the exe check, the bcrypt
+  warm-up and the `Main::main` patch.
 - Toolchain for the loader: zig cc `-target x86-windows-gnu`, as RON Revived (builder may change
   it with reason). Plugins: any compiler that makes a 32-bit DLL with a C export.
 - Old RON Revived versions install a `winmm.dll` that hooks the game by itself, before the loader
