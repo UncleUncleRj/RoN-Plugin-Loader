@@ -31,7 +31,14 @@ Invoke-CC 'shfolder.dll' (@('-shared', '-s', '-o', (Join-Path $build 'shfolder.d
 $loaderSrc = @(Get-Sources @('src\loader\*.c', 'src\common\identity.c'))
 Invoke-CC 'RonPluginLoader.dll' (@('-shared', '-s', '-o', (Join-Path $build 'RonPluginLoader.dll')) + $loaderSrc +
     @('-lkernel32', '-luser32'))
-Write-Output 'built shfolder.dll, RonPluginLoader.dll'
+# The example plugin: build\plugins\HelloPlugin.dll + HelloPlugin.ini
+$bp = Join-Path $build 'plugins'
+New-Item -ItemType Directory -Force $bp | Out-Null
+Invoke-CC 'HelloPlugin.dll' @('-shared', '-s', '-o', (Join-Path $bp 'HelloPlugin.dll'),
+    (Join-Path $root 'plugins\HelloPlugin\HelloPlugin.c'), '-lkernel32')
+Get-ChildItem $bp -Filter 'HelloPlugin.*' -Exclude 'HelloPlugin.dll' | Remove-Item -Force
+Copy-Item (Join-Path $root 'plugins\HelloPlugin\HelloPlugin.ini') $bp
+Write-Output 'built shfolder.dll, RonPluginLoader.dll, plugins\HelloPlugin.dll'
 
 if ($Test) {
     # build\testgame\plugins: test plugins for the loader tests (tests\plugins\*.c and their .ini files)
