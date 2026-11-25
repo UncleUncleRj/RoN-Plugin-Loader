@@ -22,8 +22,8 @@ whom, and loads newly dropped DLLs mid-game on a background thread.
 ## 2. Goals, non-goals, anti-goals
 
 Goals
-- Drop-in plugins: `<game>\plugins\<Name>\<Name>.dll`, each plugin in its own folder with its own
-  files.
+- Drop-in plugins: `<game>\plugins\<Name>.dll` with a same-name `.ini`; a plugin's files ship in
+  a subfolder of `plugins\` that the ini names.
 - A **load order the player sets** on a Plugins panel in the main menu. Plugins load from the top
   of the list to the bottom; when two plugins change the same thing, **the lower one wins**.
 - Plugins can give the game files: ship them, point at a folder, or **generate them at run time**
@@ -36,8 +36,10 @@ Goals
 Non-goals
 - Loading or unloading plugins while the game runs. Changing the order or the on/off state takes
   effect after a restart; the panel restarts the game for the player.
-- Data-only mods. The game's own mod system (local `mods\` folders and Steam Workshop items)
-  keeps doing that. Every plugin is a DLL.
+- Mods made only of files, with no DLL (art or data packages). The game's own mod system (local
+  `mods\` folders and Steam Workshop items) keeps loading those. Every plugin is a DLL. A plugin
+  with no files of its own, such as a developer-tools DLL that changes the game's data in code, is
+  an ordinary plugin: a DLL and its ini, with no `Folder` (user, 2026-11-24).
 - Plugins for the launcher (`patriots.exe`): the bootstrap does not load there.
 - Distributing DLLs through the Steam Workshop.
 
@@ -71,8 +73,10 @@ manager); **the panel in the main-menu column was chosen** (section 8).
    at process start, before Steam and before the crossplay threads start. It exports only
    `SHGetFolderPathA` and `SHGetFolderPathW`, forwarded to `shell32` through a `.def` (the system
    `shfolder.dll` is a thin wrapper around the same two shell32 functions). Measured: it loads
-   even when an AppCompat layer makes the System32 `winmm.dll` win. `DllMain` only loads the
-   loader DLL and installs one hook (below); nothing else runs under the loader lock.
+   even when an AppCompat layer makes the System32 `winmm.dll` win. `DllMain` only checks the
+   exe, warms up bcrypt (below) and patches a `jmp` at `Main::main`; that hook loads the loader
+   DLL. Nothing else runs under the loader lock (corrected 2026-11-24: the first draft had
+   `DllMain` load the loader DLL, which would call `LoadLibrary` under the loader lock).
 2. **Loader**: `RonPluginLoader.dll` (name: builder's call) in the game folder. All work runs on
    the game's main thread from a hook at the entry of `Main::main` (`0x560CF0`), which runs
    before `Main::init` (Steam, at `+0x24`), the game's mod scan (`+0x29`) and any data load. A
@@ -85,36 +89,52 @@ into the bootstrap: it must still happen before `PartyInitialize` (`Main::init+0
 
 ## 5. Plugins on disk and the load order
 
+User decision (2026-11-24): the loader looks for DLLs, not folders. A plugin is a DLL in
+`plugins\` with an `.ini` of the same name beside it. The ini names the plugin's subfolder, which
+the modder ships already filled with the plugin's files in the base game's layout.
+
 ```
 <game>\plugins\
     load-order.txt
+    RON Revived.dll
+    RON Revived.ini          (Folder=RON Revived)
     RON Revived\
-        RON Revived.dll
-        plugin.ini
-        data\...  art\...  (anything the plugin uses)
-    Better Minimap\
-        Better Minimap.dll
-        plugin.ini
+        data\...  art\...  sounds\...   modded files, laid out like the base game's
+        settings.json                   anything else the plugin writes for itself
+    Better Minimap.dll
+    Better Minimap.ini       (no Folder: a code-only plugin)
 ```
 
-- A plugin is a folder holding `<folder name>.dll` and `plugin.ini`. Folders without the DLL are
-  ignored (and listed in the log).
-- **`plugin.ini`** (my call; it lets the panel show every plugin, enabled or not, without running
-  a disabled plugin's code): `[Plugin]` with `Name`, `Version`, `Author`, `Description`,
-  `AffectsSim` (0/1). Reserved for the later rules feature: `Requires`, `LoadAfter`,
-  `Incompatible` (comma-separated plugin names). The exact syntax is the builder's call; it must
-  be plain text a modder writes by hand.
-- **`load-order.txt`** (my call): UTF-8 text, one plugin folder name per line, top line loads
-  first; a disabled plugin is kept in the list, marked (for example a leading `-`). The panel
-  writes it; a player may also edit it by hand.
+- A plugin is `plugins\<Name>.dll` with `plugins\<Name>.ini`. `<Name>`, the file name without
+  `.dll`, is the plugin's id in `load-order.txt`. A DLL without a same-name ini is not a plugin
+  and is left alone, so a plugin may keep helper DLLs there; the log lists them. Subfolders are
+  never searched for plugins.
+- **`<Name>.ini`** (it lets the panel show every plugin, enabled or not, without running a
+  disabled plugin's code): `[Plugin]` with `Name` (shown on the panel; defaults to the id),
+  `Version`, `Author`, `Description`, `AffectsSim` (0/1, default 1) and `Folder`. Reserved for the
+  later rules feature: `Requires`, `LoadAfter`, `Incompatible` (comma-separated plugin ids). The
+  exact syntax is the builder's call; it must be plain text a modder writes by hand.
+- **`Folder`** names the plugin's subfolder of `plugins\`. It is optional: a plugin with no files
+  (code only, or one that generates all its data) leaves it out. My calls: it must be a single
+  folder name (no `\`, `/`, `:` or `..`), the folder must exist, and a folder belongs to one
+  plugin only. The first enabled plugin in the load order that names it keeps it, and a later one
+  fails to load, with the reason.
+- **The standard:** the modder ships the modded files already in that subfolder, in the base
+  game's layout, and the loader serves them (section 9) without any code. Plugins may also write
+  files of their own (settings such as `.json` files, caches, anything they need), wherever they
+  need them; there are no hard rails. Inside the plugin's folder such a file is never served by
+  accident, because the game only asks for paths of its own.
+- **`load-order.txt`** (my call): UTF-8 text, one plugin id per line, top line loads first; a
+  disabled plugin is kept in the list, marked (for example a leading `-`). The panel writes it; a
+  player may also edit it by hand.
 - **A newly found plugin** is appended at the bottom, **enabled** (my call, as SC4: putting a
   plugin in the folder means you want it), and shown with a "new" tag until the next restart.
-- A listed plugin whose folder is gone is dropped from the file at the next save and noted in the
+- A listed plugin whose DLL is gone is dropped from the file at the next save and noted in the
   log.
-- The loader only ever loads DLLs from `<game>\plugins\<Name>\`. Never from `mods\` folders or
+- The loader only ever loads plugin DLLs from `<game>\plugins\`. Never from `mods\` folders or
   Workshop items (joining a multiplayer game subscribes the player to the host's Workshop mod by
   itself, `ModSteamWorkshop::SubscribeModNow`), never by download. A plugin may load further DLLs
-  from its own folder with `LoadLibrary` itself.
+  itself, for example from its own folder.
 
 ## 6. Plugin API
 
@@ -127,8 +147,8 @@ function pointers (no C++ ABI across the boundary). Version 1 provides:
 - **Game identity**: stock exe or CBP's `riseofnations_CBP.exe` (same TimeDateStamp; CBP's has an
   extra executable section `.cbp`), the ASLR delta, the game folder.
 - **Symbol lookup**: `api->sym("<decorated name>")` from `sbl\rise_z.map`, checked against the
-  map header's `Timestamp is 6674863f`, corrected for ASLR. Parse cost is unmeasured; if it is
-  slow, cache an index keyed on the timestamp.
+  map header's `Timestamp is 6674863f`, corrected for ASLR. Measured in the first game runs
+  (2026-11-24): 111,091 names in 34-41 ms at start-up, so no cached index is needed.
 - **Hooks** (section 7).
 - **Byte patches** (my call): address, expected stock bytes, new bytes; checked and recorded like
   hooks, so a plugin never writes game memory out of the loader's sight (RON Revived uses a
@@ -141,10 +161,10 @@ function pointers (no C++ ABI across the boundary). Version 1 provides:
 | `pre_init` | `Main::main` entry (`0x560CF0`) | Plugins load here; register files and hooks |
 | `post_init` | after `Main::init_menus` (`0x595BE0`) | Renderer, sound and menus are up |
 | `match_built` | after `Setup::build_game` (`0x5AC190`) | Map, empires and scenario script ready |
-| `sim_frame` | `Game::do_frame` (`0x591EF0`) | One simulation frame (1/15 s of game time) |
+| `sim_frame` | the only call of `Game::do_frame` (`0x591EF0`), at `Game::loop+0x14E` (`0x5916BE`) | One simulation frame (1/15 s of game time). A call-site hook, so a tool that hooks `do_frame`'s entry (a Frida agent does) doesn't silence it |
 | `render_frame` | `Game::loop_render` (`0x5917E0`) | Once per drawn picture |
-| `match_end` | `Game::close` (`0x594B80`) | |
-| `shutdown` | `Main::shutdown` (`0x5966A0`) | |
+| `match_end` | `Game::close` (`0x594B80`) | Once per match: the first `Game::close` after `match_built`. The game also calls `Game::close` to clear before it builds a match, and twice when a match ends (`Game::run`) |
+| `shutdown` | the return of `Main::run_game_loop`, called once at `Main::main+0x913` (`0x561603`) | `Main::shutdown` (`0x5966A0`) is not reached on a console quit: a trace showed the process ending inside `SteamAuthentication` (Get, CancelSteamAuthTicket) first, in a run with Steam kept out |
 
 Events fire in load order. Plugins must not call engine code from their own threads.
 
@@ -157,10 +177,17 @@ All code patching goes through the loader, which keeps one record per patched ad
 - Hooks on the same function **chain in load order**: each plugin's "original" is the hook of
   the plugin above it, ending at the game's code. So **the lowest plugin's hook runs first** and
   can decide whether the ones above it run at all, which matches "the lower one wins".
-- Forms offered: inline (5-byte `jmp` plus trampoline with relocated stolen bytes), call site
-  (`E8 rel32`, no stolen bytes), vtable slot, import address table.
-- Hooks and byte patches are installed only while plugins load (during `pre_init`, before the game
-  starts its other threads) and are never removed (my call). A plugin that wants an in-game on/off
+- Forms offered: inline (5-byte `jmp` plus a trampoline holding the stolen bytes, copied as they
+  are: they must hold no relative branch or call, as the header says; a length decoder that
+  relocates or refuses them is a later option), call site (`E8 rel32`, no stolen bytes), vtable
+  slot, import address table. A plugin may chain onto an inline hook with a longer signature than
+  the first one's: the extra bytes are checked against memory.
+- An address that is not committed, readable memory fails that one request (`RON_E_ARG`), never
+  the game.
+- Hooks and byte patches are installed only inside `RonPluginMain` (before the game starts its
+  other threads) and are never removed (my call). Event registration stays open through
+  `pre_init`. A hook made from a `pre_init` callback would land on top of every chain and run
+  before lower plugins' hooks, so it is refused (found in review, 2026-11-24). A plugin that wants an in-game on/off
   switch keeps its hook and checks its own flag. So no patch ever happens while game threads run,
   and the chain never needs a link removed from the middle.
 - Every shared address is logged with the plugins involved, and recorded for the later conflict
@@ -215,11 +242,17 @@ same place and frame as the game's Solo, Multiplayer and Options panels (`topmen
 - Restarting: write the file, start a new game process the way the current one was started, then
   quit through the game's own exit path (so settings are saved). Whether to relaunch the exe
   directly or through Steam (`steam://rungameid/287450`) must be tested; the new process must not
-  start while the old one still holds the single-instance lock, if there is one.
+  start while the old one still holds the single-instance lock, if there is one. Lead: the game
+  has a self-restart of its own. `WinMain` opens a mutex named `RiseOfNationsRestart` and waits on it
+  up to 8 s at start-up, and calls `handleSelfRestartAndFinalShutdown` (`0x560A40`) after
+  `Main::main` returns (then `TerminateProcess`); read it before writing our own relaunch.
 
 ## 9. Files from plugins
 
 A plugin tells the loader about files; it does not move files into the game folder.
+
+- **Its ini's `Folder`** is served without any code, as if the plugin had called
+  `file_folder` on it, at the plugin's place in the load order.
 
 - **Use this file**: `api->file_use("data\\unitrules.xml", "<path>")`.
 - **Look in this folder**: `api->file_folder("<path>")`. Any file in it, at the same relative
@@ -239,6 +272,10 @@ Resolution, for one requested name:
 3. Remember the result for the rest of the run.
 
 Rules:
+- Only names inside the game's content folders are served (`art\`, `data\`, `sounds\` and the
+  game's other folders). Top-level names never are: the game also looks up its renderer, sound
+  and network libraries (`d3dgl.dll`, `dssl.dll`, `CrossplayNetLib.dll`) through
+  `prepend_content_dir`, and no plugin folder may replace those (my call).
 - Hook `String::prepend_content_dir`. Workshop items prove the game accepts absolute paths from
   this function for data files.
 - Generated files go to a cache folder outside the game install that needs no admin rights, one
@@ -285,7 +322,9 @@ multiplayer features; agree with them on the channel below so both use one.
   `GameSpy::UpdateLobbyFromDTO` (`0x962C70`). The per-player side (lobby member data, or a message
   over the game's own network) is still to be found: reverse-engineering work that belongs to the
   first version, shared with the multiplayer developer.
-- Each plugin declares `AffectsSim` in `plugin.ini` (and again at load).
+- Each plugin declares `AffectsSim` in its `.ini` (and again at load). A plugin that changes any
+  data the simulation reads (rules, units, techs) counts, even with no files of its own; one that
+  only reads or shows things can declare 0.
 - The game's own mod checksum does not help: nothing compares the `mod_checksum` lobby key, and
   `GameMod::compute_checksum` adds up only a mod's `.xml` files.
 - Backstop: the game checksums the whole simulation, rules data included, every turn, so a drift
@@ -296,7 +335,7 @@ multiplayer features; agree with them on the channel below so both use one.
 ## 11. First version and later
 
 First version
-1. Bootstrap (`shfolder.dll`) and loader at `Main::main`; `load-order.txt`; `plugin.ini`.
+1. Bootstrap (`shfolder.dll`) and loader at `Main::main`; `load-order.txt`; the plugin `.ini` files.
 2. API v1: log, game identity, symbol lookup, events, hooks with chaining.
 3. File service: use, folder, generate; the `CreateFileW`/`FindFirstFileExW` fallback where needed.
 4. Plugins panel (on/off, order, details, "new"/"failed" tags, apply and restart).
@@ -329,7 +368,8 @@ Later
 - 32-bit x86 only; the exe's TimeDateStamp must be `0x6674863F` (stock or CBP), otherwise the
   loader loads no plugins and says so.
 - ASLR: every address is applied with the load delta.
-- Engine calls only on the main thread; nothing but loading the loader under the loader lock.
+- Engine calls only on the main thread. Under the loader lock only the exe check, the bcrypt
+  warm-up and the `Main::main` patch.
 - Toolchain for the loader: zig cc `-target x86-windows-gnu`, as RON Revived (builder may change
   it with reason). Plugins: any compiler that makes a 32-bit DLL with a C export.
 - Old RON Revived versions install a `winmm.dll` that hooks the game by itself, before the loader
@@ -340,7 +380,7 @@ Later
 
 ## 13. Left to the builder
 
-- File and export names, the `plugin.ini` and `load-order.txt` syntax, the cache folder location.
+- File and export names, the plugin `.ini` and `load-order.txt` syntax, the cache folder location.
 - How the panel window is built (topmenu panel element or a window built in code).
 - How the restart relaunches the game, after testing.
 - Log location and format.
@@ -351,9 +391,12 @@ Later
   `CrossplayNetLib` really calls `SHGetFolderPathW`, so the forward must be exact.
 - Which game readers bypass `String::prepend_content_dir`, and which folder listings need added
   files merged in.
-- How long parsing `rise_z.map` takes at start-up.
 - The per-player lobby channel (section 10), and whether LAN or direct-connect games use the same
   lobby path.
 - That disabling Start through `SetupWin::start_button_disable` holds while the lobby updates.
 - Plugin state in save games: `Game::walk_data` (`0x589600`) serves save, load and the checksum,
   but adding data there changes the save format.
+- Whether `shutdown` (the return of `Main::run_game_loop`) also fires on the menu's Quit and on
+  closing the window; only the console `quit` was traced.
+- Whether loading a save or a replay goes through `Setup::build_game` (callers: `Game::init+0xD33`,
+  `ConsoleWin::run_cmd`), so that `match_built` and `match_end` fire for those matches too.
