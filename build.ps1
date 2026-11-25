@@ -25,6 +25,23 @@ function Invoke-CC([string]$what, [string[]]$ccArgs) {
 }
 
 if ($Test) {
+    # build\testgame\plugins: test plugins for the loader tests (tests\plugins\*.c and their .ini files)
+    $testgame = Join-Path $build 'testgame'
+    if (Test-Path $testgame) { Remove-Item -Recurse -Force $testgame }
+    $tp = Join-Path $testgame 'plugins'
+    New-Item -ItemType Directory -Force $tp | Out-Null
+    foreach ($p in 'Good', 'Zero', 'BadMajor') {
+        Invoke-CC "$p.dll" @('-shared', '-o', (Join-Path $tp "$p.dll"), (Join-Path $root "tests\plugins\$p.c"), '-lkernel32')
+    }
+    Get-ChildItem $tp -Exclude '*.dll' | Remove-Item -Force   # import libraries and the like
+    foreach ($copy in 'NoIni', 'MissingFolder', 'Twin') { Copy-Item (Join-Path $tp 'Good.dll') (Join-Path $tp "$copy.dll") }
+    Copy-Item (Join-Path $root 'tests\plugins\*.ini') $tp
+    $junk = New-Object byte[] 64
+    (New-Object Random 7).NextBytes($junk)
+    $junk[0] = 0
+    [IO.File]::WriteAllBytes((Join-Path $tp 'Garbage.dll'), $junk)
+    New-Item -ItemType Directory -Force (Join-Path $tp 'GoodFiles') | Out-Null
+
     $src = @(Get-Sources @('tests\*.c', 'src\common\*.c', 'src\loader\*.c', 'src\bootstrap\decide.c'))
     $exe = Join-Path $build 'tests.exe'
     Invoke-CC 'tests.exe' (@('-o', $exe) + $src + @('-lkernel32', '-luser32', '-lbcrypt'))
