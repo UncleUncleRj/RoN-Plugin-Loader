@@ -8,6 +8,7 @@
 #include <stdlib.h>
 #include <string.h>
 #include "check.h"
+#include "ron_plugin.h"
 
 static void build_path(wchar_t *out, const wchar_t *name)
 {
@@ -129,4 +130,27 @@ TEST(pkg_exports_two_forwarders)
         CHECK(to && _stricmp(to, want[i][1]) == 0);
     }
     free(f);
+}
+
+/* The mark an installer reads (design section 11): the version resource names the loader, and its
+   version is the API's major.minor. */
+TEST(pkg_version_resource)
+{
+    wchar_t path[MAX_PATH];
+    build_path(path, L"shfolder.dll");
+    DWORD dummy = 0, n = GetFileVersionInfoSizeW(path, &dummy);
+    CHECK(n > 0);
+    if (!n)
+        return;
+    void *buf = malloc(n);
+    CHECK(buf && GetFileVersionInfoW(path, 0, n, buf));
+    wchar_t *name = NULL;
+    UINT len = 0;
+    CHECK(VerQueryValueW(buf, L"\\StringFileInfo\\040904B0\\ProductName", (void **)&name, &len));
+    CHECK(name && wcscmp(name, L"RoN Plugin Loader") == 0);
+    VS_FIXEDFILEINFO *fi = NULL;
+    CHECK(VerQueryValueW(buf, L"\\", (void **)&fi, &len) && fi);
+    if (fi)
+        CHECK_EQ(fi->dwFileVersionMS, ((DWORD)RON_API_MAJOR << 16) | RON_API_MINOR);
+    free(buf);
 }

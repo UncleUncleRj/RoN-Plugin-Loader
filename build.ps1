@@ -25,7 +25,7 @@ function Invoke-CC([string]$what, [string[]]$ccArgs) {
 }
 
 # The loader, one file (user decision 2026-11-24): shfolder.dll = the start code (src\bootstrap) + the loader (src\loader)
-$dllSrc = @(Get-Sources @('src\bootstrap\*.c', 'src\loader\*.c', 'src\common\*.c')) + @(Join-Path $root 'src\bootstrap\shfolder.def')
+$dllSrc = @(Get-Sources @('src\bootstrap\*.c', 'src\loader\*.c', 'src\common\*.c')) + @(Join-Path $root 'src\bootstrap\shfolder.def') + @(Join-Path $root 'src\bootstrap\version.rc')
 Invoke-CC 'shfolder.dll' (@('-shared', '-s', '-o', (Join-Path $build 'shfolder.dll')) + $dllSrc + @('-lkernel32', '-luser32', '-lbcrypt'))
 Get-ChildItem $build -Filter 'RonPluginLoader.*' | Remove-Item -Force   # left over from the two-file builds
 # The example plugin: build\plugins\HelloPlugin.dll + HelloPlugin.ini
@@ -81,7 +81,7 @@ if ($Test) {
     $src = @(Get-Sources @('tests\*.c', 'src\common\*.c', 'src\loader\*.c', 'src\bootstrap\decide.c', 'src\bootstrap\start.c') |
         Where-Object { -not ($_ -like '*\src\loader\*' -and $gameOnly -contains (Split-Path $_ -Leaf)) })
     $exe = Join-Path $build 'tests.exe'
-    Invoke-CC 'tests.exe' (@('-o', $exe) + $src + @('-lkernel32', '-luser32', '-lbcrypt'))
+    Invoke-CC 'tests.exe' (@('-o', $exe) + $src + @('-lkernel32', '-luser32', '-lbcrypt', '-lversion'))
     & $exe
     exit $LASTEXITCODE
 }
