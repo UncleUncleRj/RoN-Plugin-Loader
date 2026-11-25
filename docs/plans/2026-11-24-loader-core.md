@@ -42,6 +42,7 @@ RoN-Plugin-Loader/
                                  -Test also builds build\tests.exe + build\testgame\ and runs the tests
   include/ron_plugin.h           public plugin API (the only header plugin authors include)
   src/common/identity.c/.h       exe identity from a mapped PE image (shared by bootstrap and loader)
+  src/bootstrap/decide.c/.h      bs_should_run (no DllMain, so tests.exe can link it)
   src/bootstrap/shfolder.c       DllMain, bcrypt warm-up, Main::main patch, loads the loader
   src/bootstrap/shfolder.def     two exports forwarded to shell32
   src/loader/log.c/.h            loader.log writer

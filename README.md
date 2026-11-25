@@ -7,4 +7,5 @@ Plugins panel in the main menu. Plugins can replace, add or generate game files,
 functions through one shared hook manager, and declare whether they change the simulation, so a
 multiplayer lobby can check that every player runs the same set.
 
-Status: design. See `docs/design.md`.
+Status: design. See `docs/design.md`; build plans are in `docs/plans/`.
+`python tools/plan_html.py <plan.md> <out.html>` turns a plan into one HTML page for review.
