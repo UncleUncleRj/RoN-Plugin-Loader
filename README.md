@@ -95,7 +95,7 @@ skips the intros). Copy `SplashTestN.dll`, `SplashTestN.ini` and the `SplashTest
 
 | Path | What |
 |---|---|
-| `include/ron_plugin.h` | The plugin API, the only header a plugin includes |
+| `include/ron_plugin.h` | The plugin API, the only header a plugin includes. MIT license (its notice is in the file), so any plugin may copy it |
 | `src/bootstrap/` | The start of `shfolder.dll`: loads at process start, hooks `Main::main`, runs the loader from there |
 | `src/loader/` | The loader, built into `shfolder.dll`: load order, plugin ini files, symbol map, hook manager, events, API, safe start, the file service (`files.c` who serves what, `files_game.c` the hook on the game's own lookup, `files_win32.c` KernelBase's file calls and merged folder listings), the Plugins panel (`panel.c` state, `menufile.c` the generated menu file, `menu.c` and `menu_draw.c` the menu hooks and drawing, `game.c` the engine calls they use) |
 | `src/common/` | Exe identity |
