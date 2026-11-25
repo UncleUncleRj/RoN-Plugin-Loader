@@ -18,6 +18,10 @@ RonResult hm_call(int owner, uintptr_t site, void *detour, void **orig);
 RonResult hm_ptr(int owner, uintptr_t slot, uintptr_t expected, void *detour, void **orig);
 RonResult hm_patch(int owner, uintptr_t at, const uint8_t *expect, const uint8_t *bytes, uint32_t len);
 
+/* How many distinct addresses the owner has a link or a byte patch at (the panel's "Hooks n game
+   functions"). */
+int hm_owner_count(int owner);
+
 /* Undoes the owner's links and patches (the owner is the newest link in every chain it touched). */
 void hm_rollback_owner(int owner);
 void hm_lock(void);    /* afterwards every request returns RON_E_STATE */

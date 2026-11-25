@@ -215,3 +215,16 @@ TEST(bad_address_refused)
     CHECK_EQ(hm_inline(1, 0x10, k_stock, NULL, 11, 6, (void *)d1, (void **)&o1), RON_E_ARG);
     VirtualFree(reserved, 0, MEM_RELEASE);
 }
+
+TEST(hm_owner_count_counts_addresses)
+{
+    static uint8_t target[4] = {1, 2, 3, 4};
+    static const uint8_t expect[2] = {1, 2}, bytes[2] = {9, 9};
+    start();
+    CHECK_EQ(hm_inline(1, (uintptr_t)hk_add1, k_stock, NULL, 11, 6, (void *)d1, (void **)&o1), RON_OK);
+    CHECK_EQ(hm_patch(1, (uintptr_t)target, expect, bytes, 2), RON_OK);
+    CHECK_EQ(hm_owner_count(1), 2);
+    CHECK_EQ(hm_owner_count(2), 0);
+    hm_reset();
+    CHECK_EQ(hm_owner_count(1), 0);
+}

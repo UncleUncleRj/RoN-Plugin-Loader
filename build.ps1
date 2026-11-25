@@ -35,7 +35,17 @@ Invoke-CC 'HelloPlugin.dll' @('-shared', '-s', '-o', (Join-Path $bp 'HelloPlugin
     (Join-Path $root 'plugins\HelloPlugin\HelloPlugin.c'), '-lkernel32')
 Get-ChildItem $bp -Filter 'HelloPlugin.*' -Exclude 'HelloPlugin.dll' | Remove-Item -Force
 Copy-Item (Join-Path $root 'plugins\HelloPlugin\HelloPlugin.ini') $bp
-Write-Output 'built shfolder.dll, plugins\HelloPlugin.dll'
+# Load-order test plugins: SplashTest1.dll and SplashTest2.dll from one source, their .ini files, and
+# their videos in plugins\SplashTest1\ and plugins\SplashTest2\ (ffmpeg; skipped with a warning without it)
+foreach ($n in 1, 2) {
+    $name = "SplashTest$n"
+    Invoke-CC "$name.dll" @('-shared', '-s', "-DSPLASH_N=$n", '-o', (Join-Path $bp "$name.dll"),
+        (Join-Path $root 'plugins\SplashTest\SplashTest.c'), '-lkernel32')
+    Get-ChildItem $bp -Filter "$name.*" -Exclude "$name.dll" | Remove-Item -Force
+    Copy-Item (Join-Path $root "plugins\SplashTest\$name.ini") $bp
+    & (Join-Path $root 'tools\make_splash_videos.ps1') -N $n -Out (Join-Path $bp $name)
+}
+Write-Output 'built shfolder.dll, plugins\HelloPlugin.dll, plugins\SplashTest1.dll, plugins\SplashTest2.dll'
 
 if ($Test) {
     # build\testgame\plugins: test plugins for the loader tests (tests\plugins\*.c and their .ini files)
@@ -66,7 +76,10 @@ if ($Test) {
     Get-ChildItem $tp2 -Exclude '*.dll' | Remove-Item -Force
     Copy-Item (Join-Path $root 'tests\plugins\LateHook.ini'), (Join-Path $root 'tests\plugins\CppGood.ini') $tp2
 
-    $src = @(Get-Sources @('tests\*.c', 'src\common\*.c', 'src\loader\*.c', 'src\bootstrap\decide.c', 'src\bootstrap\start.c'))
+    # The menu code needs the game: tests\stub_menu.c stands in for menu.c, menu_draw.c and game.c
+    $gameOnly = @('menu.c', 'menu_draw.c', 'game.c')
+    $src = @(Get-Sources @('tests\*.c', 'src\common\*.c', 'src\loader\*.c', 'src\bootstrap\decide.c', 'src\bootstrap\start.c') |
+        Where-Object { -not ($_ -like '*\src\loader\*' -and $gameOnly -contains (Split-Path $_ -Leaf)) })
     $exe = Join-Path $build 'tests.exe'
     Invoke-CC 'tests.exe' (@('-o', $exe) + $src + @('-lkernel32', '-luser32', '-lbcrypt'))
     & $exe

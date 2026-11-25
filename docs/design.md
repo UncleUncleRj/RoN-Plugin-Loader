@@ -204,54 +204,134 @@ All code patching goes through the loader, which keeps one record per patched ad
 
 ## 8. The Plugins panel
 
-Opened by a new **Plugins** button in the main menu. It is a panel in the main-menu column, in the
-same place and frame as the game's Solo, Multiplayer and Options panels (`topmenu.xml` panels at
-`left="30" top="40" width="548" height="768"`), over the moving menu background.
+User decisions (2026-11-24, second round): the button is **Plugins**, in the main menu's **Tools &
+Extras** panel, directly under **Steam Workshop** (`Data\topmenu.xml`, panel `OPTIONS`, button
+`workshop`). It opens the Plugins panel in the main-menu column (layout A, as chosen before), styled
+after the game's Steam Workshop window (`Data\workshopwin.xml`, `WorkshopWin`), with this design's
+own features: details, tags, the change notice, Apply and Restart.
+
+The panel is the loader's own (part of `shfolder.dll`, not a plugin) and shows even with no plugin
+installed. Same place and frame as the game's Solo, Multiplayer and Tools & Extras panels
+(`left="30" top="40" width="548" height="768"`, buttons at `x="41"`, 36 apart), over the moving
+menu background.
+
+User decisions (2026-11-25, after the first look in the game): the panel gets a dark background,
+and, like the Steam Workshop window's sections, the selected plugin's information moves out of the
+list into its own **Description** box, which also shows the plugin's exact file name.
 
 ```
-+------------------------------------+
-| Plugins                            |
-| Top loads first. Lower plugins win |
-| when two change the same thing.    |
-|  1 [x] RON Revived   2026.11.24 ^v |
-|  2 [x] Nations Pack  1.0  (!)   ^v |
-|  3 [x] CBP Balance   a11        ^v |   <- selected: details unfold below
-|        by MHLoppy. Rebalances units, techs and nations.
-|        Changes 24 data files and hooks 3 game functions.
-|  4 [x] Better Minimap 1.2 (new) ^v |
-|  5 [ ] Debug Tools   0.3        ^v |
-| Order changed. The game restarts   |
-| to apply it.                       |
-| [Apply and restart]  [Back]        |
-+------------------------------------+
++------------------------------------------+
+| Plugins                                  |
+| ######## dark pane (Workshop 0xD2000000) |
+|               Load Order                 |
+| +--------------------------------------+ |
+| | Top loads first. Lower plugins win   | |
+| | when two change the same thing.      | |
+| |  1 [x] RON Revived     2026.11.24    | |
+| |  2 [x] Nations Pack    1.0   failed  | |
+| |  3 [x] Better Minimap  1.2   new     | |  <- selected
+| |  4 [ ] Debug Tools     0.3           | |
+| +--------------------------------------+ |
+|               Description                |
+| +--------------------------------------+ |
+| | Better Minimap                       | |
+| | Version 1.2, by Someone              | |
+| | Shows ... (description, 2 lines)     | |
+| | File: BetterMinimap.dll              | |
+| | Hooks 3 game functions.              | |
+| +--------------------------------------+ |
+| Not applied yet. Apply and Restart to    |
+| use this list.                           |
+| [ Move Up                              ] |
+| [ Move Down                            ] |
+| [ Apply and Restart                    ] |
+| [ Back                                 ] |
++------------------------------------------+
 ```
 
 - The plugin names in the sketch are examples; no CBP plugin is part of this project.
-- Each row: load-order number, on/off box, name, version, up/down arrows. Selecting a row unfolds
-  its details: author, description, how many files it serves and game functions it hooks (from
-  the previous run's records), and why it failed to load, if it did.
-- Tags: "new"; "failed"; later, rule warnings such as "move below CBP Balance".
-- A notice appears as soon as the list differs from what is running.
-- **Apply and restart** writes `load-order.txt` and restarts the game. **Back** discards
-  unapplied changes (my call).
-- Built with the game's own interface code, the way RON Revived's panels are: a window object of
-  the game's interface library, drawing through `IFaceRenderManager` (global at `0x00EBD1C0`,
-  `IFaceRenderManager::add` `0x51F3D0`), text through `Buffer::write_l`/`write_cent_l`, frames
-  through `IFaceRenderManager::draw_border`, the mouse through `Window::get_mouse_pos`, and the
-  game's click sound. Use only textures the menu files already declare (a texture missing from the
-  interface files draws as a white square).
-- The button: main-menu buttons come from `Data\topmenu.xml` and act by name in
-  `TopMenu::check_result` (`0x59B1E0`); `TopMenu::sub_menu` (`0x59C030`) opens a panel. The
-  loader adds the button by serving a generated `topmenu.xml` through its own file service, and
-  hooks `check_result` for the name `plugins`. Whether the panel is a new `topmenu.xml` panel
-  element or a window the loader builds itself is the builder's call.
-- Restarting: write the file, start a new game process the way the current one was started, then
-  quit through the game's own exit path (so settings are saved). Whether to relaunch the exe
-  directly or through Steam (`steam://rungameid/287450`) must be tested; the new process must not
-  start while the old one still holds the single-instance lock, if there is one. Lead: the game
-  has a self-restart of its own. `WinMain` opens a mutex named `RiseOfNationsRestart` and waits on it
-  up to 8 s at start-up, and calls `handleSelfRestartAndFinalShutdown` (`0x560A40`) after
-  `Main::main` returns (then `TerminateProcess`); read it before writing our own relaunch.
+- Each row: load-order number, check box, name, version, and a tag: "new" (appended to the order
+  at this start) or "failed" (enabled but did not load). Clicking a row selects it; clicking its
+  check box turns that plugin on or off.
+- The **Description** box shows the selected plugin: its name; version and author, description
+  (2 lines, "..." when cut) from its ini; its file (`<id>.dll`); and its status: how many game
+  functions it hooked in this run, or why it failed, or that it is off or not loaded in a safe
+  start. With nothing selected it says "Click a plugin to see its description." How many files it
+  serves joins them once the file service exists.
+- Look of the sections (my calls, after the Workshop: `WorkshopWin::on_redraw` fills its pane
+  black at alpha `0xD2`, `PaneModManager::on_redraw` writes its section titles with
+  `FontFamily::get(14, 1)` centred): one dark pane from the panel's first row to above its
+  buttons, a centred title and a 1-px grey outline per section, the notice at the pane's foot.
+- **Move Up** and **Move Down** move the selected plugin one place (the Steam Workshop window's
+  Priority Up and Priority Down; my call, in place of the arrows on every row of the first sketch).
+- When more plugins exist than rows fit, the list scrolls (mouse wheel; more is the builder's call).
+- A notice appears as soon as the list differs from what is running (the order and on/off state
+  read at this start).
+- **Apply and Restart** writes `load-order.txt` and restarts the game; it does nothing while
+  nothing changed. **Back** discards unapplied changes (my call) and returns to Tools & Extras.
+- With no plugin installed the list says so and names the folder: "No plugins installed. Put a
+  plugin's .dll and .ini in the plugins folder."
+- **Safe start** (user decision, 2026-11-24: automatic). If a start never reached the main menu
+  (a plugin crashed or hung the game first), the next start loads no plugins, so the panel stays
+  reachable. A marker file in `plugins\` (name: builder's call) is written before plugins load,
+  names each plugin while it loads (my call: so the culprit can be named), and is removed once the
+  main menu has drawn its first frame (so after every plugin's `post_init` callback and menu
+  hooks; at `post_init` only when the panel's redraw hook could not be installed, and at once
+  when neither hook could). Found at start, it means the last start stopped early: the loader
+  reads the order and the ini files as usual but loads no plugin, logs why, and the panel says so
+  at the top: "The last start did not reach the menu, so this start runs without plugins. Turn off
+  the plugin that stopped it, then Apply and Restart." The plugin named in the marker is tagged
+  "failed" with "the game stopped while it loaded". In a safe start, Apply and Restart always
+  restarts, changed list or not (my call), and the marker is gone by then, so that start is normal.
+  Closing the game during loading counts as a stop too; one plugin-free start follows (accepted).
+- The loader's texts are English (my call); localisation is later.
+- Look: the Steam Workshop window's pieces. Its check boxes (`check_on` / `check_off` from
+  `art\wrapper_pieces_02.tga`), its list rows and text, the game's own menu buttons and frame.
+  Use only textures the menu files declare (a texture missing from the interface files draws as a
+  white square): the generated panel declares the ones it uses, as `workshopwin.xml` does.
+
+How it is built (my calls, 2026-11-24):
+- **The button and the panel come from a generated `topmenu.xml`.** The game names the file in one
+  function, `GetTopMenuXMLFile` (`0x59F7C0`, returns the String `topmenu.xml`), called by
+  `TopMenu::init`, `TopMenu::reinit`, `TopMenu::init_logo`, `TopMenu::init_light` and
+  `TopMenuSelection::exec` (which reads the file each time a panel opens). At start the loader
+  reads `topmenu.xml` as the game would get it (so a version another mod serves counts), adds
+  `<BUTTON name="plugins" title="Plugins" .../>` after the `workshop` button of the full game's
+  `OPTIONS` panel (not the `TOPMENU_TRIAL` copy) and a `PLUGINS` panel element, writes the result
+  to a cache file under `plugins\`, and hooks `GetTopMenuXMLFile` to return it. Without a
+  `workshop` button the Plugins button goes above `back`; if anything fails, the game runs with
+  its own file and no button (logged). The file service takes this over later.
+- **The panel is a real menu panel.** `TopMenu::sub_menu` (`0x59C030`) runs a panel by name in a
+  loop: `TopMenuSelection::exec` waits for a button, `TopMenu::check_result` (`0x59B1E0`) turns its
+  name into a result, -1 stays in the panel. A hook on `check_result` answers `plugins` with
+  `sub_menu("PLUGINS")` and the panel's own buttons, as RON Revived's Survival button and PLAY
+  panel do (`survival.c`). So the game supplies the frame, background, slide-in, button look,
+  hover and click sound; Move Up, Move Down, Apply and Restart and Back are ordinary panel buttons.
+- **Only the plugin list is the loader's drawing**, in the panel's free area, through the game's
+  interface code: textures and frames through `IFaceRenderManager` (global at `0x00EBD1C0`,
+  `IFaceRenderManager::add` `0x51F3D0`, `draw_border`), text through `Buffer::write_l` /
+  `write_cent_l`, row style as `WorkshopWin::on_listbox_entry_redraw` (`0x6ADAD0`). Clicks and the
+  wheel come from a hook on the panel's input. Which redraw and input functions to hook is the
+  builder's to find (`TopMenu::on_redraw`, `TopMenuSelection`'s handlers; RON Revived's
+  `menuhelp.c` hooks `TopMenuSelection::on_redraw`). Found while writing this: `TopMenuSelection`'s
+  table of virtual functions (`0xB3F3F4`) holds its `on_redraw` in slot 46 (`+0xB8`) and the
+  `Window` defaults for `on_left_click` (slot 54, `+0xD8`), `on_left_down` (55), `on_mouse_move`
+  (52) and `on_mouse_wheel` (69, `+0x114`), so slot hooks there reach only the menu panels.
+- **No plugin can take the panel away** (my call, 2026-11-24): it is the player's way to turn a
+  plugin off. The loader installs its own menu hooks after every plugin has loaded (before the hook
+  manager locks), so its links head their chains and see the `plugins` button first; every other
+  button passes on down the chain. Its `topmenu.xml` change is made to whatever file the chain
+  below its `GetTopMenuXMLFile` link returns, so it lands on top of any plugin's version.
+- **Restarting uses the game's own restart** (found 2026-11-24). The Steam Workshop window's Reload
+  Assets button restarts the game: `WorkshopWin::reloadAssets` (`0x6AC3E0`) sets
+  `s_selfRestartDesired` (`0xCAA314`) to 1, `game_type` (`0xCAB374`) to `0x15`, `quit`
+  (`0xE335C4`) to 1 and `Game+0x558` to 0. The game then leaves through its normal exit path, and
+  after `Main::main` returns, `handleSelfRestartAndFinalShutdown` (`0x560A40`) creates the mutex
+  `RiseOfNationsRestart`, starts the exe again with the same command line plus ` +skipIntro`
+  (`CreateProcessW`), waits 500 ms and releases the mutex; the new process's `WinMain` waits up to
+  8 s on that mutex before it starts. Apply and Restart writes `load-order.txt`, then does what
+  `reloadAssets` does. The new process is not started through Steam, as with Reload Assets;
+  whether that matters (Steam overlay, achievements, multiplayer) is to be watched in a run.
 
 ## 9. Files from plugins
 
@@ -345,7 +425,10 @@ First version
    `.ini` files.
 2. API v1: log, game identity, symbol lookup, events, hooks with chaining.
 3. File service: use, folder, generate; the `CreateFileW`/`FindFirstFileExW` fallback where needed.
-4. Plugins panel (on/off, order, details, "new"/"failed" tags, apply and restart).
+4. Plugins panel under Tools & Extras (on/off, order, details, "new"/"failed" tags, apply and
+   restart, safe start). Built and checked in the game 2026-11-25, with the load-order test
+   plugins SplashTest1 and SplashTest2 (each replaces the first intro video; the lower one wins).
+   Items 1, 2 and 6 were built 2026-11-24.
 5. The multiplayer check of every player before the match (section 10).
 6. A hello-world plugin, tested unattended with the game's `autostart.ini` and the workspace's
    debug tool.
@@ -370,6 +453,10 @@ Later
   the save format unchanged) and warn when loaded with a different list (my call to leave this out
   of the first version; until then a replay played without its plugins diverges silently).
 - The in-game debug overlay discussed earlier becomes a plugin.
+- An event when the renderer (`d3dgl.dll`) or the sound library loads, with hooks allowed in it in
+  load order, so plugins can hook their code through the API. They load inside `System::init`,
+  after plugins; the SplashTest plugins work around it by hooking `Video::init` in the executable
+  and giving the new video player a copy of its virtual table.
 
 ## 12. Constraints
 
@@ -382,9 +469,11 @@ Later
   it with reason). Plugins: any compiler that makes a 32-bit DLL with a C export.
 - Old RON Revived versions install a `winmm.dll` that hooks the game by itself, before the loader
   starts. If the loader finds one (a `winmm.dll` in the game folder that is not the system's, or its
-  hooks' `jmp` bytes at known addresses), it loads no plugins and says why on the Plugins panel and
-  in the log, rather than patching on top of it (my call). The installer's warning should make this
-  rare.
+  hooks' `jmp` bytes at known addresses), it loads no plugins and says why in the log, rather than
+  patching on top of it (my call). The Plugins button and panel stay off too (my call, 2026-11-24):
+  the old DLL hooks `TopMenu::check_result` and the menu's drawing itself and serves its own
+  `topmenu.xml`, so the panel would have to sit on hooks that write without checking. The
+  installer's warning should make this rare.
 
 ## 13. Left to the builder
 
@@ -408,3 +497,9 @@ Later
   closing the window; only the console `quit` was traced.
 - Whether loading a save or a replay goes through `Setup::build_game` (callers: `Game::init+0xD33`,
   `ConsoleWin::run_cmd`), so that `match_built` and `match_end` fire for those matches too.
+- After Apply and Restart the game is no longer started by Steam: whether the Steam overlay and
+  sign-in still work then (the same holds for the Workshop window's Reload Assets). The panel's
+  look, order, on/off, Apply and Restart and the test plugins were checked in the game
+  (2026-11-25); this was not.
+- A start closed during loading counts as a stop, so one plugin-free start follows (accepted in
+  section 8); not yet seen in the game.

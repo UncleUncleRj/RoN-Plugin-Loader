@@ -139,6 +139,7 @@ TEST(run_writes_order)
     size_t n1 = read_file(dir, L"plugins\\load-order.txt", first, sizeof first);
     CHECK_STR(first, "# Load order: top loads first; the lowest plugin wins. A leading - turns a plugin off.\r\n"
                      "BadMajor\r\nGarbage\r\nGood\r\nMissingFolder\r\nTwin\r\nZero\r\n");
+    ev_fire(RON_EV_POST_INIT, NULL);  /* the menu was reached, so the next start is a normal one */
     run(dir, RON_EXE_STOCK);
     size_t n2 = read_file(dir, L"plugins\\load-order.txt", second, sizeof second);
     CHECK_EQ(n1, n2);
@@ -203,4 +204,42 @@ TEST(run_cpp_plugin_loads)
     static char log[8192];
     read_file(dir, L"plugins\\loader.log", log, sizeof log);
     CHECK(strstr(log, "[CppGood] cpp loaded") != NULL);
+}
+
+TEST(run_safe_start_after_stop)
+{
+    wchar_t dir[MAX_PATH];
+    make_game(dir);
+    write_file(dir, L"plugins\\.start-marker", "loading Good\r\n");
+    CHECK_EQ(run(dir, RON_EXE_STOCK), 0);
+    CHECK_EQ(loader_safe_start(), 1);
+    const LoaderPlugin *good = find(L"Good");
+    CHECK(good != NULL);
+    if (good)
+        CHECK_STR(good->reason, "the game stopped while it loaded");
+    static char log[16384];
+    read_file(dir, L"plugins\\loader.log", log, sizeof log);
+    CHECK(strstr(log, "the last start did not reach the menu: no plugins this start (it stopped while loading Good)") != NULL);
+}
+
+TEST(run_normal_after_menu)
+{
+    wchar_t dir[MAX_PATH];
+    make_game(dir);
+    run(dir, RON_EXE_STOCK);
+    ev_fire(RON_EV_POST_INIT, NULL);
+    char text[64];
+    CHECK_EQ(read_file(dir, L"plugins\\.start-marker", text, sizeof text), 0);
+    CHECK_EQ(run(dir, RON_EXE_STOCK), 1);
+    CHECK_EQ(loader_safe_start(), 0);
+}
+
+TEST(run_marker_after_loading)
+{
+    wchar_t dir[MAX_PATH];
+    make_game(dir);
+    run(dir, RON_EXE_STOCK);
+    char text[64] = "";
+    read_file(dir, L"plugins\\.start-marker", text, sizeof text);
+    CHECK_STR(text, "loaded\r\n");
 }
