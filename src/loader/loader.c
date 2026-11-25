@@ -274,7 +274,7 @@ int loader_run(const LoaderConfig *cfg)
     wchar_t path[MAX_PATH];
     _snwprintf(path, MAX_PATH, L"%ls\\loader.log", g_plugins_dir);
     log_open(path);
-    const char *kind = g_game.exe == RON_EXE_STOCK ? "stock" : g_game.exe == RON_EXE_CBP ? "cbp" : "unknown";
+    const char *kind = g_game.exe == RON_EXE_STOCK ? "stock" : g_game.exe == RON_EXE_PATCHED ? "patched" : "unknown";
     log_line("loader", "game %s %08x", kind, (unsigned)g_game.timestamp);
     if (g_game.exe == RON_EXE_UNKNOWN) {
         log_line("loader", "unknown game build, no plugins loaded");

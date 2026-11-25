@@ -42,7 +42,7 @@ extern "C" {
 typedef struct RonPlugin RonPlugin;   /* opaque, one per plugin */
 
 typedef enum { RON_OK = 0, RON_E_ARG, RON_E_SIG, RON_E_CONFLICT, RON_E_STATE, RON_E_MEM } RonResult;
-typedef enum { RON_EXE_UNKNOWN = 0, RON_EXE_STOCK, RON_EXE_CBP } RonExeKind;
+typedef enum { RON_EXE_UNKNOWN = 0, RON_EXE_STOCK, RON_EXE_PATCHED } RonExeKind;
 /* RON_EV_RENDER_FRAME fires for every drawn picture of a match (from its loading screen on), not in
    the menus.
    RON_EV_LIBRARY (minor 1) fires once for each library the game loads after plugins: the renderer
@@ -54,7 +54,7 @@ typedef enum { RON_EV_PRE_INIT, RON_EV_POST_INIT, RON_EV_MATCH_BUILT, RON_EV_SIM
                RON_EV_RENDER_FRAME, RON_EV_MATCH_END, RON_EV_SHUTDOWN, RON_EV_LIBRARY, RON_EV_COUNT } RonEvent;
 
 typedef struct RonGameInfo {
-    RonExeKind exe;          /* stock riseofnations.exe or CBP's riseofnations_CBP.exe */
+    RonExeKind exe;          /* stock riseofnations.exe, or a patched copy of the same build with an extra code section */
     uint32_t timestamp;      /* the exe's PE TimeDateStamp, 0x6674863F */
     uintptr_t delta;         /* runtime image base - 0x400000 (ASLR) */
     const wchar_t *game_dir; /* the game folder, no trailing backslash */
