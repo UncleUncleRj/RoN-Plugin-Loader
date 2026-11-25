@@ -36,8 +36,11 @@ Goals
 Non-goals
 - Loading or unloading plugins while the game runs. Changing the order or the on/off state takes
   effect after a restart; the panel restarts the game for the player.
-- Data-only mods. The game's own mod system (local `mods\` folders and Steam Workshop items)
-  keeps doing that. Every plugin is a DLL.
+- Mods made only of files, with no DLL (art or data packages). The game's own mod system (local
+  `mods\` folders and Steam Workshop items)
+  keeps loading those. Every plugin is a DLL. A plugin with no files of its own, such as a
+  developer-tools DLL that changes the game's data in code, is an ordinary plugin: a DLL and its
+  ini, with no `Folder` (user, 2026-11-24).
 - Plugins for the launcher (`patriots.exe`): the bootstrap does not load there.
 - Distributing DLLs through the Steam Workshop.
 
@@ -310,7 +313,9 @@ multiplayer features; agree with them on the channel below so both use one.
   `GameSpy::UpdateLobbyFromDTO` (`0x962C70`). The per-player side (lobby member data, or a message
   over the game's own network) is still to be found: reverse-engineering work that belongs to the
   first version, shared with the multiplayer developer.
-- Each plugin declares `AffectsSim` in its `.ini` (and again at load).
+- Each plugin declares `AffectsSim` in its `.ini` (and again at load). A plugin that changes any
+  data the simulation reads (rules, units, techs) counts, even with no files of its own; one that
+  only reads or shows things can declare 0.
 - The game's own mod checksum does not help: nothing compares the `mod_checksum` lobby key, and
   `GameMod::compute_checksum` adds up only a mod's `.xml` files.
 - Backstop: the game checksums the whole simulation, rules data included, every turn, so a drift
