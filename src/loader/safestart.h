@@ -18,4 +18,9 @@ void ss_loading(const wchar_t *id);  /* marker: "loading <id>" */
 void ss_loaded(void);                /* marker: "loaded" */
 void ss_menu_reached(void);          /* deletes the marker */
 
+/* When ss_menu_reached is due: at the first frame the menu draws (the panel's redraw hook took), at
+   post_init (that hook took; also without game hooks, where tests fire it), or at once. */
+typedef enum { SS_CLEAR_AT_FRAME, SS_CLEAR_AT_POST_INIT, SS_CLEAR_NOW } SsClear;
+SsClear ss_clear_point(int game_hooks, int frame_hook, int post_init_hook);
+
 #endif

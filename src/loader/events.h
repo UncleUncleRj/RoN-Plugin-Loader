@@ -28,6 +28,7 @@ void ev_game_closed(void *game);
 /* Installs the loader's own (owner 0) hooks on the six game functions; returns how many succeeded.
    A failed hook is logged and leaves its event silent. */
 int ev_install_game_hooks(uintptr_t delta);
+int ev_installed(RonEvent ev);  /* 1 when that event's game hook took */
 const GameHook *ev_game_hooks(int *count);
 
 #endif

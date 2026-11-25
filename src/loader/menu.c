@@ -184,8 +184,9 @@ static void THISCALL d_sel_button(void *sel, const void *name)
     o_sel_button(sel, name);
 }
 
-int menu_install(uintptr_t delta)
+int menu_install(uintptr_t delta, int *frame_hook)
 {
+    *frame_hook = 0;
     static const uint8_t cr_sig[9] = {0x55, 0x8B, 0xEC, 0x64, 0xA1, 0, 0, 0, 0};
     static const uint8_t file_sig[10] = {0x55, 0x8B, 0xEC, 0x6A, 0xFF, 0x68, 0, 0, 0, 0};
     static const uint8_t file_mask[10] = {1, 1, 1, 1, 1, 1, 0, 0, 0, 0};
@@ -195,7 +196,7 @@ int menu_install(uintptr_t delta)
     g_answer = hm_inline(0, 0x59B1E0 + delta, cr_sig, NULL, 9, 9, (void *)d_check_result, (void **)&o_check_result) == RON_OK;
     ok += g_answer;
     ok += hm_ptr(0, vt + 0x2AC, 0x59E930 + delta, (void *)d_sel_button, (void **)&o_sel_button) == RON_OK;
-    ok += menu_draw_install(vt, delta);
+    ok += menu_draw_install(vt, delta, frame_hook);
     if (g_answer)  /* no button the game could not answer */
         ok += hm_inline(0, 0x59F7C0 + delta, file_sig, file_mask, 10, 5, (void *)d_menu_file, (void **)&o_menu_file) == RON_OK;
     return ok;

@@ -12,14 +12,32 @@
 #include "common/identity.h"
 
 static int g_safe;  /* this start loads no plugins: the last one never reached the menu */
+static SsClear g_clear = SS_CLEAR_AT_POST_INIT;  /* when the marker goes (final review: not before the
+                                                    menu has drawn, plugin callbacks and hooks included) */
+static int g_cleared;
 
-/* post_init: the main menu is up, so this start did not stop early. */
+static void clear_marker(void)
+{
+    if (!g_cleared) {
+        g_cleared = 1;
+        ss_menu_reached();
+    }
+}
+
+void loader_menu_frame(void)
+{
+    if (g_clear == SS_CLEAR_AT_FRAME)
+        clear_marker();
+}
+
+/* post_init: the menus are set up; the marker goes here only when no menu frame will tell. */
 static void __cdecl on_menu_up(RonEvent ev, void *game_object, void *user)
 {
     (void)ev;
     (void)game_object;
     (void)user;
-    ss_menu_reached();
+    if (g_clear == SS_CLEAR_AT_POST_INIT)
+        clear_marker();
 }
 
 static LoaderPlugin g_plugins[ORDER_MAX];
@@ -227,6 +245,8 @@ int loader_run(const LoaderConfig *cfg)
 {
     g_count = 0;
     g_safe = 0;
+    g_clear = SS_CLEAR_AT_POST_INIT;
+    g_cleared = 0;
     g_game = cfg->game;
     wcsncpy(g_game_dir, cfg->game.game_dir ? cfg->game.game_dir : L".", MAX_PATH - 1);
     g_game.game_dir = g_game_dir;
@@ -300,8 +320,14 @@ int loader_run(const LoaderConfig *cfg)
     }
     /* The loader's menu hooks come after every plugin's, so they head their chains and no plugin can
        take the Plugins panel away (design section 8). */
+    int frame_hook = 0;
     if (cfg->install_game_hooks)
-        log_line("loader", "menu hooks: %d of 6 installed", menu_install(g_game.delta));
+        log_line("loader", "menu hooks: %d of 6 installed", menu_install(g_game.delta, &frame_hook));
+    g_clear = ss_clear_point(cfg->install_game_hooks, frame_hook, ev_installed(RON_EV_POST_INIT));
+    if (g_clear == SS_CLEAR_NOW) {
+        log_line("loader", "no menu hook to tell that the menu is up: the start counts as good now");
+        clear_marker();
+    }
     /* Hooks only inside RonPluginMain: a hook made from pre_init would land on top of every chain and
        run before lower plugins' hooks. Event registration stays open through pre_init. */
     hm_lock();

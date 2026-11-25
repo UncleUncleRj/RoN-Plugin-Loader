@@ -170,6 +170,10 @@ const GameHook *ev_game_hooks(int *count)
     return k_hooks;
 }
 
+static int g_installed[RON_EV_COUNT];
+
+int ev_installed(RonEvent ev) { return ev >= 0 && ev < RON_EV_COUNT && g_installed[ev]; }
+
 int ev_install_game_hooks(uintptr_t delta)
 {
     void *const detours[6] = {(void *)d_init_menus, (void *)d_build_game, (void *)d_do_frame,
@@ -182,9 +186,10 @@ int ev_install_game_hooks(uintptr_t delta)
         RonResult r = h->call_site
                           ? hm_call(0, h->va + delta, detours[i], origs[i])
                           : hm_inline(0, h->va + delta, h->sig, h->mask, h->sig_len, h->stolen, detours[i], origs[i]);
-        if (r == RON_OK)
+        if (r == RON_OK) {
             ok++;
-        else
+            g_installed[h->ev] = 1;
+        } else
             log_line("loader", "event hook on %s (0x%06X) failed (%d): that event stays silent", k_names[i],
                      (unsigned)h->va, (int)r);
     }

@@ -13,6 +13,7 @@
 #include "loader/menu_draw.h"
 #include "loader/game.h"
 #include "loader/hooks.h"
+#include "loader/loader.h"
 
 #define THISCALL __attribute__((thiscall))
 #define TEXT_SIZE 12
@@ -202,6 +203,7 @@ static void draw_list(void *sel)
 static void THISCALL d_redraw(void *sel)
 {
     o_redraw(sel);
+    loader_menu_frame();  /* a menu frame got drawn, plugin hooks included: this start is good */
     if (menu_is_plugins_panel(sel))
         draw_list(sel);
 }
@@ -240,10 +242,11 @@ static void THISCALL d_wheel(void *sel, int delta, int x, int y)
     o_wheel(sel, delta, x, y);
 }
 
-int menu_draw_install(uintptr_t vt, uintptr_t delta)
+int menu_draw_install(uintptr_t vt, uintptr_t delta, int *redraw_ok)
 {
     int ok = 0;
-    ok += hm_ptr(0, vt + 0xB8, 0x59EE80 + delta, (void *)d_redraw, (void **)&o_redraw) == RON_OK;
+    *redraw_ok = hm_ptr(0, vt + 0xB8, 0x59EE80 + delta, (void *)d_redraw, (void **)&o_redraw) == RON_OK;
+    ok += *redraw_ok;
     ok += hm_ptr(0, vt + 0xD8, 0x41C180 + delta, (void *)d_click, (void **)&o_click) == RON_OK;
     ok += hm_ptr(0, vt + 0x114, 0x41C360 + delta, (void *)d_wheel, (void **)&o_wheel) == RON_OK;
     return ok;

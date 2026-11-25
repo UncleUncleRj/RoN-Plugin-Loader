@@ -64,3 +64,12 @@ void ss_menu_reached(void)
     if (g_path[0])
         DeleteFileW(g_path);
 }
+
+SsClear ss_clear_point(int game_hooks, int frame_hook, int post_init_hook)
+{
+    if (!game_hooks)
+        return SS_CLEAR_AT_POST_INIT;
+    if (frame_hook)
+        return SS_CLEAR_AT_FRAME;
+    return post_init_hook ? SS_CLEAR_AT_POST_INIT : SS_CLEAR_NOW;
+}

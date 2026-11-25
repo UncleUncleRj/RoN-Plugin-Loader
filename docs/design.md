@@ -275,7 +275,9 @@ list into its own **Description** box, which also shows the plugin's exact file 
   (a plugin crashed or hung the game first), the next start loads no plugins, so the panel stays
   reachable. A marker file in `plugins\` (name: builder's call) is written before plugins load,
   names each plugin while it loads (my call: so the culprit can be named), and is removed once the
-  main menu is up (`post_init`). Found at start, it means the last start stopped early: the loader
+  main menu has drawn its first frame (so after every plugin's `post_init` callback and menu
+  hooks; at `post_init` only when the panel's redraw hook could not be installed, and at once
+  when neither hook could). Found at start, it means the last start stopped early: the loader
   reads the order and the ini files as usual but loads no plugin, logs why, and the panel says so
   at the top: "The last start did not reach the menu, so this start runs without plugins. Turn off
   the plugin that stopped it, then Apply and Restart." The plugin named in the marker is tagged

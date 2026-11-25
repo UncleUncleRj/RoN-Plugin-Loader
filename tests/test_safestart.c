@@ -115,3 +115,16 @@ TEST(ss_unwritable_dir_is_normal)
     CHECK(!marker_exists(dir));
     CHECK(GetFileAttributesW(dir) == INVALID_FILE_ATTRIBUTES);
 }
+
+/* Final review: the marker is cleared once the menu has drawn a frame when the panel's redraw hook
+   took, else at post_init when that hook took, else at once (a start must never stay "unfinished"
+   for good). Without game hooks (tests, tools) post_init is fired by hand. */
+TEST(ss_clear_point_choices)
+{
+    CHECK_EQ(ss_clear_point(0, 0, 0), SS_CLEAR_AT_POST_INIT);
+    CHECK_EQ(ss_clear_point(0, 1, 1), SS_CLEAR_AT_POST_INIT);
+    CHECK_EQ(ss_clear_point(1, 1, 1), SS_CLEAR_AT_FRAME);
+    CHECK_EQ(ss_clear_point(1, 1, 0), SS_CLEAR_AT_FRAME);
+    CHECK_EQ(ss_clear_point(1, 0, 1), SS_CLEAR_AT_POST_INIT);
+    CHECK_EQ(ss_clear_point(1, 0, 0), SS_CLEAR_NOW);
+}

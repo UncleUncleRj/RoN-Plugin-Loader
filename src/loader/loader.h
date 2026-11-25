@@ -24,6 +24,7 @@ typedef struct LoaderConfig {
 
 int loader_run(const LoaderConfig *cfg);   /* returns the number of plugins loaded */
 const LoaderPlugin *loader_plugins(int *count);
+void loader_menu_frame(void);  /* the menu drew a frame: clears the safe-start marker when that is due */
 int loader_safe_start(void);  /* 1 when this start loads no plugins because the last one stopped early */
 
 /* Runs the loader for the real game. Called once, from the hook at Main::main (bootstrap/shfolder.c),
