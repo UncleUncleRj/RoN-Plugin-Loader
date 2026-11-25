@@ -24,6 +24,15 @@ function Invoke-CC([string]$what, [string[]]$ccArgs) {
     if ($LASTEXITCODE) { throw "build failed: $what" }
 }
 
+# The bootstrap (shfolder.dll) and the loader (RonPluginLoader.dll)
+$boot = @('src\bootstrap\shfolder.c', 'src\bootstrap\decide.c', 'src\common\identity.c', 'src\bootstrap\shfolder.def') |
+    ForEach-Object { Join-Path $root $_ }
+Invoke-CC 'shfolder.dll' (@('-shared', '-s', '-o', (Join-Path $build 'shfolder.dll')) + $boot + @('-lkernel32', '-lbcrypt'))
+$loaderSrc = @(Get-Sources @('src\loader\*.c', 'src\common\identity.c'))
+Invoke-CC 'RonPluginLoader.dll' (@('-shared', '-s', '-o', (Join-Path $build 'RonPluginLoader.dll')) + $loaderSrc +
+    @('-lkernel32', '-luser32'))
+Write-Output 'built shfolder.dll, RonPluginLoader.dll'
+
 if ($Test) {
     # build\testgame\plugins: test plugins for the loader tests (tests\plugins\*.c and their .ini files)
     $testgame = Join-Path $build 'testgame'
