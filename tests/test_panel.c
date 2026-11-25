@@ -1,0 +1,257 @@
+#include <windows.h>
+#include <stdio.h>
+#include <string.h>
+#include "check.h"
+#include "loader/panel.h"
+#include "loader/order.h"
+
+static LoaderPlugin g_pl[ORDER_MAX];
+static int g_hooks[ORDER_MAX];
+static Panel g_p;
+
+static void plugin(int i, const wchar_t *id, const char *author, const char *desc, int enabled, LpState st,
+                   const char *reason)
+{
+    LoaderPlugin *p = &g_pl[i];
+    memset(p, 0, sizeof *p);
+    wcscpy(p->id, id);
+    WideCharToMultiByte(CP_UTF8, 0, id, -1, p->m.name, sizeof p->m.name, NULL, NULL);
+    strcpy(p->m.version, "1.0");
+    strcpy(p->m.author, author);
+    strcpy(p->m.description, desc);
+    p->enabled = enabled;
+    p->state = st;
+    strcpy(p->reason, reason);
+}
+
+/* A: loaded, 2 hooks, author Ann, a 70-character description; B: off; C: failed. */
+static Panel *three(void)
+{
+    plugin(0, L"A", "Ann", "abcd abcd abcd abcd abcd abcd abcd abcd abcd abcd abcd abcd abcd abcdefghi", 1, LP_LOADED, "");
+    plugin(1, L"B", "", "", 0, LP_DISABLED, "");
+    plugin(2, L"C", "", "", 1, LP_FAILED, "LoadLibrary error 193");
+    g_hooks[0] = 2;
+    g_hooks[1] = 0;
+    g_hooks[2] = 0;
+    panel_init(&g_p, g_pl, 3, g_hooks, 0);
+    return &g_p;
+}
+
+TEST(panel_init_rows)
+{
+    Panel *p = three();
+    CHECK_EQ(p->n, 3);
+    CHECK_EQ(p->rows[2].failed, 1);
+    CHECK_EQ(p->rows[1].enabled, 0);
+    CHECK_EQ(p->rows[0].loaded, 1);
+    CHECK_EQ(p->rows[0].hooks, 2);
+    CHECK_EQ(p->selected, -1);
+    CHECK_EQ(panel_changed(p), 0);
+}
+
+TEST(panel_toggle_twice_unchanged)
+{
+    Panel *p = three();
+    panel_toggle(p, 1);
+    CHECK_EQ(panel_changed(p), 1);
+    panel_toggle(p, 1);
+    CHECK_EQ(panel_changed(p), 0);
+}
+
+TEST(panel_move_follows_selection)
+{
+    Panel *p = three();
+    panel_select(p, 2);
+    CHECK_EQ(panel_move(p, -1), 1);
+    CHECK(wcscmp(p->rows[1].id, L"C") == 0);
+    CHECK_EQ(p->selected, 1);
+    CHECK_EQ(panel_changed(p), 1);
+    CHECK_EQ(panel_move(p, +1), 1);
+    CHECK_EQ(panel_changed(p), 0);
+}
+
+TEST(panel_move_at_edges)
+{
+    Panel *p = three();
+    panel_select(p, 0);
+    CHECK_EQ(panel_move(p, -1), 0);
+    panel_select(p, 2);
+    CHECK_EQ(panel_move(p, +1), 0);
+    panel_select(p, -1);
+    CHECK_EQ(panel_move(p, -1), 0);
+    CHECK_EQ(panel_changed(p), 0);
+}
+
+TEST(panel_details_lines)
+{
+    Panel *p = three();
+    char lines[4][128];
+    CHECK_EQ(panel_details(p, 0, lines), 4);
+    CHECK_STR(lines[0], "by Ann");
+    CHECK(strlen(lines[1]) <= PANEL_WRAP);
+    CHECK(strstr(lines[2], "abcdefghi") != NULL);
+    CHECK(strstr(lines[2], "...") == NULL);
+    CHECK_STR(lines[3], "Hooks 2 game functions.");
+}
+
+TEST(panel_details_wraps_utf8)
+{
+    Panel *p = three();
+    char desc[256] = "";
+    for (int i = 0; i < 130 && strlen(desc) + 2 < sizeof desc; i++)
+        strcat(desc, "\xC3\xA9");  /* U+00E9, two bytes */
+    strcpy(p->rows[0].description, desc);
+    char lines[4][128];
+    int n = panel_details(p, 0, lines);
+    CHECK_EQ(n, 4);
+    for (int i = 1; i <= 2; i++) {
+        wchar_t w[128];
+        CHECK(MultiByteToWideChar(CP_UTF8, MB_ERR_INVALID_CHARS, lines[i], -1, w, 128) > 0);
+    }
+    size_t l2 = strlen(lines[2]);
+    CHECK(l2 >= 3 && strcmp(lines[2] + l2 - 3, "...") == 0);
+}
+
+TEST(panel_details_status)
+{
+    Panel *p = three();
+    char lines[4][128];
+    int n = panel_details(p, 1, lines);
+    CHECK_EQ(n, 1);
+    CHECK_STR(lines[0], "Turned off.");
+    n = panel_details(p, 2, lines);
+    CHECK_STR(lines[n - 1], "Failed: LoadLibrary error 193");
+    p->rows[0].hooks = 1;
+    n = panel_details(p, 0, lines);
+    CHECK_STR(lines[n - 1], "Hooks 1 game function.");
+    p->rows[0].hooks = 0;
+    n = panel_details(p, 0, lines);
+    CHECK_STR(lines[n - 1], "Hooks no game functions.");
+    p->safe_start = 1;
+    p->rows[0].loaded = 0;
+    n = panel_details(p, 0, lines);
+    CHECK_STR(lines[n - 1], "Not loaded in this start.");
+}
+
+TEST(panel_hit_rows)
+{
+    Panel *p = three();
+    int box = -1;
+    CHECK_EQ(panel_hit(p, 328, 70, 36 + 5, &box), 0);
+    CHECK_EQ(box, 0);
+    CHECK_EQ(panel_hit(p, 328, 30, 36 + 24 + 5, &box), 1);
+    CHECK_EQ(box, 1);
+    CHECK_EQ(panel_hit(p, 328, 70, 10, &box), -1);
+    CHECK_EQ(panel_hit(p, 328, 70, 36 + 3 * 24 + 5, &box), -1);  /* below the last row */
+}
+
+TEST(panel_hit_below_details)
+{
+    Panel *p = three();
+    char lines[4][128];
+    panel_select(p, 0);
+    CHECK_EQ(panel_details(p, 0, lines), 4);
+    int start1 = 36 + 24 + 4 * 16 + 4, box;
+    CHECK_EQ(panel_hit(p, 328, 70, start1 - 1, &box), 0);  /* inside row 0's details */
+    CHECK_EQ(box, 0);
+    CHECK_EQ(panel_hit(p, 328, 70, start1 + 1, &box), 1);
+    PanelSlot s[ORDER_MAX];
+    CHECK_EQ(panel_layout(p, 328, s, ORDER_MAX), 3);
+    CHECK_EQ(s[1].y, start1);
+    CHECK_EQ(s[0].h, 24 + 4 * 16 + 4);
+}
+
+TEST(panel_hit_scrolled)
+{
+    for (int i = 0; i < 20; i++) {
+        wchar_t id[16];
+        swprintf(id, 16, L"P%02d", i);
+        plugin(i, id, "", "", 1, LP_LOADED, "");
+        g_hooks[i] = 0;
+    }
+    panel_init(&g_p, g_pl, 20, g_hooks, 0);
+    panel_scroll(&g_p, 328, -5);
+    CHECK_EQ(g_p.scroll, 5);
+    int box;
+    CHECK_EQ(panel_hit(&g_p, 328, 70, 36 + 5, &box), 5);
+    panel_scroll(&g_p, 328, -100);
+    CHECK_EQ(g_p.scroll, 20 - (328 - 36) / 24);
+    panel_scroll(&g_p, 328, +100);
+    CHECK_EQ(g_p.scroll, 0);
+}
+
+TEST(panel_notice_order)
+{
+    Panel *p = three();
+    CHECK(panel_notice(p) == NULL);
+    panel_toggle(p, 0);
+    CHECK_STR(panel_notice(p), "Not applied yet. Apply and Restart to use this list.");
+    p->safe_start = 1;
+    CHECK_STR(panel_notice(p), "The last start did not reach the menu, so this start runs without plugins. "
+                               "Turn off the plugin that stopped it, then Apply and Restart.");
+    p->save_failed = 1;
+    CHECK_STR(panel_notice(p), "Could not save plugins\\load-order.txt. Nothing was changed.");
+}
+
+static void temp_file(wchar_t *path, const wchar_t *name)
+{
+    GetTempPathW(MAX_PATH, path);
+    wchar_t tail[64];
+    swprintf(tail, 64, L"ron_panel_%lu_%ls", GetCurrentProcessId(), name);
+    wcscat(path, tail);
+}
+
+TEST(panel_save_writes_order)
+{
+    Panel *p = three();
+    panel_select(p, 2);
+    panel_move(p, -1);
+    panel_move(p, -1);  /* C, A, B */
+    panel_toggle(p, 2); /* B was off: now on */
+    panel_toggle(p, 2); /* and off again */
+    wchar_t path[MAX_PATH];
+    temp_file(path, L"order.txt");
+    CHECK_EQ(panel_save(p, path), 1);
+    CHECK_EQ(p->save_failed, 0);
+    OrderItem items[3];
+    memset(items, 0, sizeof items);
+    wcscpy(items[0].name, L"C");
+    items[0].enabled = 1;
+    wcscpy(items[1].name, L"A");
+    items[1].enabled = 1;
+    wcscpy(items[2].name, L"B");
+    items[2].enabled = 0;
+    char want[1024], got[1024];
+    size_t wl = order_serialize(items, 3, want, sizeof want);
+    FILE *f = _wfopen(path, L"rb");
+    CHECK(f != NULL);
+    size_t gl = f ? fread(got, 1, sizeof got - 1, f) : 0;
+    if (f)
+        fclose(f);
+    got[gl] = 0;
+    CHECK_EQ(gl, wl);
+    CHECK_STR(got, want);
+    DeleteFileW(path);
+}
+
+TEST(panel_save_fails_cleanly)
+{
+    Panel *p = three();
+    wchar_t path[MAX_PATH];
+    temp_file(path, L"dir");
+    CreateDirectoryW(path, NULL);
+    CHECK_EQ(panel_save(p, path), 0);
+    CHECK_EQ(p->save_failed, 1);
+    CHECK_STR(panel_notice(p), "Could not save plugins\\load-order.txt. Nothing was changed.");
+    RemoveDirectoryW(path);
+}
+
+TEST(panel_empty)
+{
+    panel_init(&g_p, g_pl, 0, g_hooks, 0);
+    int box;
+    PanelSlot s[4];
+    CHECK_EQ(panel_hit(&g_p, 328, 70, 40, &box), -1);
+    CHECK_EQ(panel_layout(&g_p, 328, s, 4), 0);
+    CHECK(panel_notice(&g_p) == NULL);
+}
