@@ -1,0 +1,297 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Plugins Panel Implementation Plan</title>
+<style>
+:root{--paper:#F3F5F6;--ink:#1C2230;--muted:#556071;--rule:#D2D8DE;--bronze:#86642A;--bronze-soft:#E6DCC6;
+--code:#E7EBEE;--done:#3C7550;--sans:"Segoe UI",system-ui,-apple-system,sans-serif;
+--serif:"Palatino Linotype","Book Antiqua",Palatino,Georgia,serif;--mono:"Cascadia Mono",Consolas,"Courier New",monospace}
+@media (prefers-color-scheme:dark){:root{--paper:#141820;--ink:#E2E5EA;--muted:#99A3B0;--rule:#2A313C;
+--bronze:#D2A857;--bronze-soft:#3A3122;--code:#1C222B;--done:#7DB98C}}
+*{box-sizing:border-box}
+html{scroll-padding-top:1rem}
+body{margin:0;background:var(--paper);color:var(--ink);font:16px/1.62 var(--sans);
+display:grid;grid-template-columns:17rem minmax(0,46rem);gap:3.5rem;justify-content:center;padding:0 1.5rem}
+nav{position:sticky;top:0;height:100vh;overflow:auto;padding:2.2rem 0 2rem}
+nav .plan{font:600 1.05rem/1.3 var(--serif);margin:0 0 1.4rem;color:var(--ink)}
+nav ol{list-style:none;margin:0;padding:0}
+nav li a{display:grid;grid-template-columns:1.6rem 1fr auto;gap:.6rem;align-items:center;padding:.28rem 0;
+color:var(--ink);text-decoration:none;font-size:.9rem;line-height:1.3}
+nav li a:hover .t{text-decoration:underline}
+nav .sec-link a{grid-template-columns:1fr;color:var(--muted);padding:.22rem 0 .22rem 2.2rem}
+nav .route{position:relative;margin:.6rem 0}
+nav .route::before{content:"";position:absolute;left:.75rem;top:.9rem;bottom:.9rem;width:2px;background:var(--bronze-soft)}
+nav .node{position:relative;width:1.6rem;height:1.6rem;border-radius:50%;display:grid;place-items:center;
+font:600 .78rem/1 var(--serif);color:var(--ink);
+background:conic-gradient(var(--bronze) calc(var(--p,0)*1turn),var(--paper) 0);border:2px solid var(--bronze)}
+nav .node b{width:1.05rem;height:1.05rem;border-radius:50%;background:var(--paper);display:grid;place-items:center;font-weight:600}
+nav .done .node b{background:var(--bronze);color:var(--paper)}
+nav .cnt{color:var(--muted);font-size:.78rem;font-variant-numeric:tabular-nums}
+nav button{margin-top:1.6rem;font:inherit;font-size:.82rem;color:var(--muted);background:none;border:1px solid var(--rule);
+border-radius:3px;padding:.3rem .7rem;cursor:pointer}
+nav button:hover{color:var(--ink);border-color:var(--muted)}
+main{padding:2.2rem 0 6rem;min-width:0}
+.hero h1{font:600 2.45rem/1.12 var(--serif);margin:0 0 1.2rem;letter-spacing:-.01em}
+.hero blockquote{margin:0 0 1.6rem;padding:.2rem 0 .2rem 1rem;border-left:3px solid var(--rule);color:var(--muted);font-size:.9rem}
+.hero > p:first-of-type{font-size:1.16rem;line-height:1.55}
+.hero p strong:first-child{font-family:var(--serif);font-size:1.02em;color:var(--bronze)}
+h2{font:600 1.6rem/1.2 var(--serif);margin:3rem 0 1rem;padding-top:1.6rem;border-top:1px solid var(--rule)}
+.sec h3{font:600 1.25rem/1.25 var(--serif);margin:2rem 0 .8rem}
+.task{margin-top:2.6rem;padding-top:1.6rem;border-top:1px solid var(--rule)}
+.task h3{display:grid;grid-template-columns:auto 1fr auto;gap:1rem;align-items:end;margin:0 0 1rem;
+font:600 1.4rem/1.25 var(--serif)}
+.task .num{font:600 2.6rem/1 var(--serif);color:var(--bronze);font-variant-numeric:lining-nums tabular-nums;min-width:2.2ch;display:grid;justify-items:start}
+.task .num .lbl{font:400 .78rem/1.2 var(--serif);color:var(--muted);letter-spacing:.02em;margin-bottom:.15rem}
+.task .ttl{padding-bottom:.28rem}
+.task .prog{padding-bottom:.4rem;font:400 .82rem/1 var(--sans);color:var(--muted);font-variant-numeric:tabular-nums;white-space:nowrap}
+.task.complete .prog{color:var(--done)}
+p{margin:.6rem 0}
+ul,ol{padding-left:1.35rem;margin:.6rem 0}
+li{margin:.3rem 0}
+li > p{margin:.4rem 0}
+ul.steps,ol.steps{list-style:none;padding-left:0}
+.steps > li{margin:.55rem 0}
+label.step{display:grid;grid-template-columns:1.4rem 1fr;gap:.55rem;align-items:start;cursor:pointer}
+label.step input{margin:.28rem 0 0;width:1.05rem;height:1.05rem;accent-color:var(--bronze);cursor:pointer}
+label.step input:checked + span{color:var(--muted)}
+.steps > li > ul,.steps > li > ol,.steps > li > p,.steps > li > pre,.steps > li > .tbl{margin-left:1.95rem}
+code{font:0.86em/1.4 var(--mono);background:var(--code);padding:.08em .32em;border-radius:3px;overflow-wrap:anywhere}
+pre{background:var(--code);padding:.9rem 1rem;border-radius:4px;overflow:auto;line-height:1.45;font-size:.84rem}
+pre code{background:none;padding:0;font-size:inherit;overflow-wrap:normal}
+.tbl{overflow:auto;margin:1rem 0}
+table{border-collapse:collapse;width:100%;font-size:.88rem}
+th,td{text-align:left;vertical-align:top;padding:.45rem .6rem;border-bottom:1px solid var(--rule)}
+th{font-weight:600;border-bottom:2px solid var(--bronze-soft)}
+hr{border:0;margin:0}
+strong{font-weight:600}
+a:focus-visible,button:focus-visible,input:focus-visible{outline:2px solid var(--bronze);outline-offset:2px}
+footer{margin-top:4rem;color:var(--muted);font-size:.82rem;border-top:1px solid var(--rule);padding-top:1rem}
+@media (max-width:960px){body{grid-template-columns:minmax(0,46rem);gap:0}
+nav{position:static;height:auto;padding:1.4rem 0 0;border-bottom:1px solid var(--rule)}
+main{padding-top:1.4rem}.hero h1{font-size:2rem}}
+@media (prefers-reduced-motion:no-preference){nav .node{transition:background .2s}}
+@media print{nav{display:none}body{display:block}.task{break-inside:avoid-page}}
+</style>
+</head>
+<body data-plan="2026-11-24-plugins-panel">
+<nav aria-label="Plan contents"><p class="plan">Plugins Panel Implementation Plan</p><ol><li class="sec-link"><a href="#global-constraints"><span class="t">Global Constraints</span></a></li><li class="sec-link"><a href="#copy-exact"><span class="t">Copy (exact)</span></a></li><li class="sec-link"><a href="#review-focus"><span class="t">Review Focus</span></a></li><li class="sec-link"><a href="#file-structure"><span class="t">File structure</span></a></li><li><ol class="route"><li data-task="task-1"><a href="#task-1"><span class="node"><b>1</b></span><span class="t">Safe-start marker</span><span class="cnt"></span></a></li><li data-task="task-2"><a href="#task-2"><span class="node"><b>2</b></span><span class="t">The menu file edit</span><span class="cnt"></span></a></li><li data-task="task-3"><a href="#task-3"><span class="node"><b>3</b></span><span class="t">The panel model</span><span class="cnt"></span></a></li><li data-task="task-4"><a href="#task-4"><span class="node"><b>4</b></span><span class="t">Hook counts and the loader's start sequence</span><span class="cnt"></span></a></li><li data-task="task-5"><a href="#task-5"><span class="node"><b>5</b></span><span class="t">Game calls and the menu hooks</span><span class="cnt"></span></a></li><li data-task="task-6"><a href="#task-6"><span class="node"><b>6</b></span><span class="t">Drawing the list and taking its clicks</span><span class="cnt"></span></a></li><li data-task="task-7"><a href="#task-7"><span class="node"><b>7</b></span><span class="t">In the game</span><span class="cnt"></span></a></li><li data-task="task-8"><a href="#task-8"><span class="node"><b>8</b></span><span class="t">Documents</span><span class="cnt"></span></a></li></ol></li><li class="sec-link"><a href="#later-plans"><span class="t">Later plans</span></a></li></ol><button type="button" id="clear">Clear all checkmarks</button></nav>
+<main>
+<header class="hero"><h1>Plugins Panel Implementation Plan</h1>
+<blockquote><p><strong>For agentic workers:</strong> REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (<code>- [ ]</code>) syntax for tracking.</p></blockquote>
+<p><strong>Goal:</strong> A <strong>Plugins</strong> button in the main menu's Tools &amp; Extras panel, under Steam Workshop, opens a Plugins panel where the player turns plugins on and off, changes their order, reads each one's details, and applies the list with a restart; a start that never reached the menu is followed by a start without plugins.</p>
+<p><strong>Architecture:</strong> Everything is part of the loader (<code>shfolder.dll</code>). Pure C modules, unit-tested without the game, hold the logic: the start marker (<code>safestart</code>), the <code>topmenu.xml</code> edit (<code>menufile</code>) and the panel's state, layout and texts (<code>panel</code>). A thin game layer (<code>game</code>) wraps the engine calls. <code>menu</code> installs six owner-0 hooks after the plugins have loaded:</p>
+<ul><li><code>GetTopMenuXMLFile</code>, which serves the generated menu file;</li><li><code>TopMenu::check_result</code>, which opens the panel and applies the list;</li><li>four slots of <code>TopMenuSelection</code>'s virtual table: drawing, left click, mouse wheel and button clicks.</li></ul>
+<p>The game itself draws the panel's frame and buttons; the loader draws only the list.</p>
+<p><strong>Tech Stack:</strong> C11, zig cc <code>-target x86-windows-gnu</code> through <code>python -m ziglang</code>, Win32 wide-character APIs, the existing hook manager and event registry, <code>devtools/rondbg</code> for the game run.</p>
+<p><strong>Spec:</strong> <code>docs/design.md</code>, section 8 (approved 2026-11-24), with section 12 (old <code>winmm.dll</code>) and the events table in section 6. The engine facts behind every address are in <code>decomp/ron-ee-6674863f/notes/2026-11-24-plugins-panel-menu.txt</code> (F1–F26) and <code>…-plugins-panel-draw.txt</code> (root repo); cite them by number.</p>
+</header>
+<section class="sec" id="global-constraints"><h2>Global Constraints</h2>
+<ul><li>32-bit x86. Every game address below is static (base <code>0x400000</code>); add the load delta (<code>VA(x) = x + delta</code>).</li><li>Engine calls only on the game's main thread (all six hooks run there).</li><li>The loader's menu hooks are owner 0 and are installed <strong>after</strong> every plugin's <code>RonPluginMain</code> and <strong>before</strong> <code>hm_lock</code>, so they head their chains (design §8, "No plugin can take the panel away").</li><li>With an unknown exe or an old <code>&lt;game&gt;\winmm.dll</code>, <code>loader_run</code> returns early as today: no plugins, no marker, no button, no panel.</li><li>Every engine function called through a pointer is declared with the convention verified in the ledgers, never the one the decorated name suggests (see <code>include/ron_plugin.h</code>'s rule; the <code>Main::main</code> lesson).</li><li>The game's <code>String</code> (0x14 bytes, aligned 4) is built only through the game's constructors and freed with <code>String::close</code>. <code>String::String(wchar_t const*)</code> (<code>0xA1EDD0</code>) keeps the pointer, so use it only on buffers that live for the whole process.</li><li>Texts the player sees are English and fixed by this plan (copy below); UTF-8 internally, converted to wide for the game.</li><li>Every text file is CRLF; run <code>crlf-convert</code> on files you write. Tests: <code>powershell -File build.ps1 -Test</code> (all must pass; today 62).</li><li>Writing into the live game folder needs the user's go-ahead in this session (task 7 asks).</li></ul>
+</section>
+<section class="sec" id="copy-exact"><h3>Copy (exact)</h3>
+<div class="tbl"><table><thead><tr><th>Where</th><th>Text</th></tr></thead><tbody><tr><td>Button in Tools &amp; Extras</td><td><code>Plugins</code></td></tr><tr><td>Panel title</td><td><code>Plugins</code></td></tr><tr><td>Intro above the rows</td><td><code>Top loads first. Lower plugins win when two change the same thing.</code></td></tr><tr><td>Empty list</td><td><code>No plugins installed. Put a plugin's .dll and .ini in the plugins folder.</code></td></tr><tr><td>Notice, list changed</td><td><code>Not applied yet. Apply and Restart to use this list.</code></td></tr><tr><td>Notice, safe start</td><td><code>The last start did not reach the menu, so this start runs without plugins. Turn off the plugin that stopped it, then Apply and Restart.</code></td></tr><tr><td>Notice, save failed</td><td><code>Could not save plugins\load-order.txt. Nothing was changed.</code></td></tr><tr><td>Buttons</td><td><code>Move Up</code>, <code>Move Down</code>, <code>Apply and Restart</code>, <code>Back</code></td></tr><tr><td>Tags</td><td><code>new</code>, <code>failed</code></td></tr><tr><td>Details</td><td><code>by &lt;author&gt;</code>; description; <code>Hooks &lt;n&gt; game functions.</code> / <code>Hooks 1 game function.</code> / <code>Hooks no game functions.</code>; <code>Failed: &lt;reason&gt;</code>; <code>Turned off.</code>; <code>Not loaded in this start.</code></td></tr><tr><td>Culprit's reason</td><td><code>the game stopped while it loaded</code></td></tr></tbody></table></div>
+</section>
+<section class="sec" id="review-focus"><h2>Review Focus</h2>
+<ul><li>**A mod's own <code>topmenu.xml</code>.** It may lack the <code>workshop</code> button, use single quotes or upper-case tags, or already contain a <code>plugins</code> button. The button then goes above <code>back</code>, or isn't added twice, and the game still starts. Tests <code>mf_above_back_without_workshop</code>, <code>mf_single_quotes_and_case</code>, <code>mf_idempotent</code> (task 2).</li><li><strong>More plugins than rows fit.</strong> The wheel scrolls; clicks hit the right row when scrolled and when a selected row's details push later rows down. Tests <code>panel_hit_scrolled</code> and <code>panel_hit_below_details</code> (task 3).</li><li><strong>Long or non-ASCII names and descriptions.</strong> Wrapping never splits a UTF-8 character and never exceeds the line count. Test <code>panel_details_wraps_utf8</code> (task 3).</li><li>**<code>load-order.txt</code> cannot be written** (read-only, locked). No restart, and the "save failed" notice shows. Test <code>panel_save_fails_cleanly</code> (task 3).</li><li><strong>Safe-start edges.</strong> A missing or read-only <code>plugins</code> folder never blocks a normal start, and two failed starts in a row stay safe. Tests <code>ss_unwritable_dir_is_normal</code> and <code>ss_safe_start_twice</code> (task 1).</li></ul>
+<hr>
+</section>
+<section class="sec" id="file-structure"><h2>File structure</h2>
+<pre><code>RoN-Plugin-Loader/
+  src/loader/safestart.c/.h   the start marker: was the last start stopped before the menu, and by which plugin
+  src/loader/menufile.c/.h    topmenu.xml text edit: the Plugins button and the PLUGINS panel element
+  src/loader/panel.c/.h       panel state (rows, selection, scroll), edits, change check, layout, hit test, texts, save
+  src/loader/game.c/.h        thin wrappers over the engine calls the menu needs (strings, sub_menu, restart, drawing)
+  src/loader/menu.c/.h        menu_install: the six hooks; the menu file cache; button and click handling
+  src/loader/menu_draw.c      the list's drawing (rows, check boxes, details, intro, notice)
+  src/loader/hooks.c/.h       + hm_owner_count
+  src/loader/loader.c/.h      + safe start, the post_init marker removal, menu_install, loader_safe_start
+  tests/test_safestart.c, tests/test_menufile.c, tests/test_panel.c   new
+  tests/test_hooks.c, tests/test_loader.c                             extended
+  build.ps1                   no change (src\loader\*.c is globbed)</code></pre>
+<p><code>menu.c</code>, <code>menu_draw.c</code> and <code>game.c</code> need the game and are proven in the run of task 7; everything they decide is in the tested modules.</p>
+<hr>
+</section>
+<section class="task" id="task-1"><h3><span class="num"><span class="lbl">Task</span>1</span><span class="ttl">Safe-start marker</span><span class="prog" data-prog="task-1"></span></h3>
+<p><strong>Files:</strong></p>
+<ul><li>Create: <code>src/loader/safestart.c</code>, <code>src/loader/safestart.h</code></li><li>Test: <code>tests/test_safestart.c</code></li></ul>
+<p><strong>Interfaces:</strong></p>
+<ul><li>Produces:<ul><li><code>int ss_begin(const wchar_t *plugins_dir, wchar_t *culprit, size_t cap)</code>: returns 1 when the marker from an earlier start is still there (the start stopped early). In that case <code>culprit</code> gets the plugin id it names, or <code>L""</code>. It then writes a fresh marker reading <code>starting</code>. Returns 0 when there was no marker, or when the marker can't be read or written.</li><li><code>void ss_loading(const wchar_t *id)</code>: marker becomes <code>loading &lt;id&gt;</code>.</li><li><code>void ss_loaded(void)</code>: marker becomes <code>loaded</code>.</li><li><code>void ss_menu_reached(void)</code>: deletes the marker.</li></ul></li><li>The marker is <code>&lt;plugins_dir&gt;\.start-marker</code>, one UTF-8 line with CRLF. The functions keep the path from <code>ss_begin</code> in a static.</li></ul>
+<ul class="steps"><li><label class="step"><input type="checkbox" data-box="task-1-1"><span><strong>Step 1: Write the failing tests</strong> (each in a fresh temp folder, made like <code>test_loader.c</code>'s <code>make_game_from</code>):</span></label></li></ul>
+<pre><code class="lang-c">TEST(ss_first_start_is_normal)        /* ss_begin(dir) == 0, culprit == L"", file .start-marker reads "starting\r\n" */
+TEST(ss_after_menu_is_normal)         /* ss_begin; ss_menu_reached; marker gone; ss_begin == 0 */
+TEST(ss_stopped_while_loading)        /* ss_begin; ss_loading(L"Bad"); ss_begin == 1, culprit == L"Bad", marker reads "starting\r\n" */
+TEST(ss_stopped_after_loading)        /* ss_begin; ss_loading(L"A"); ss_loaded(); ss_begin == 1, culprit == L"" */
+TEST(ss_non_ascii_id)                 /* ss_loading(L"Plug-üж"); ss_begin == 1, culprit round-trips exactly */
+TEST(ss_safe_start_twice)             /* stop, ss_begin == 1, no menu, ss_begin == 1 again (culprit L"") */
+TEST(ss_unwritable_dir_is_normal)     /* ss_begin(L"&lt;temp&gt;\\missing\\plugins") == 0; ss_loading/ss_menu_reached do nothing */</code></pre>
+<ul class="steps"><li><label class="step"><input type="checkbox" data-box="task-1-2"><span><strong>Step 2: Run</strong> <code>powershell -File build.ps1 -Test</code>. Expected: link errors for <code>ss_*</code> (no <code>safestart.c</code> yet).</span></label></li><li><label class="step"><input type="checkbox" data-box="task-1-3"><span>**Step 3: Implement <code>safestart.c</code>.** Use <code>_wfopen</code>/<code>fwrite</code>/<code>DeleteFileW</code>; ids are converted with <code>WideCharToMultiByte</code>/<code>MultiByteToWideChar</code> (CP_UTF8). Each write replaces the whole file.</span></label></li><li><label class="step"><input type="checkbox" data-box="task-1-4"><span><strong>Step 4: Run the tests.</strong> Expected: <code>tests: 69 passed, 0 failed</code>.</span></label></li><li><label class="step"><input type="checkbox" data-box="task-1-5"><span><strong>Step 5: Commit</strong> <code>git add src/loader/safestart.* tests/test_safestart.c</code> and <code>git commit -m "Safe start: the start marker (safestart.c)"</code>.</span></label></li></ul>
+</section>
+<section class="task" id="task-2"><h3><span class="num"><span class="lbl">Task</span>2</span><span class="ttl">The menu file edit</span><span class="prog" data-prog="task-2"></span></h3>
+<p><strong>Files:</strong></p>
+<ul><li>Create: <code>src/loader/menufile.c</code>, <code>src/loader/menufile.h</code></li><li>Test: <code>tests/test_menufile.c</code></li></ul>
+<p><strong>Interfaces:</strong></p>
+<ul><li>Produces:<ul><li><code>typedef enum { MF_FAILED = 0, MF_AFTER_WORKSHOP, MF_ABOVE_BACK, MF_ALREADY } MfWhere;</code></li><li><code>size_t menufile_add_plugins(const char *xml, size_t len, char *out, size_t cap, MfWhere *where)</code>: returns the length of the new text, NUL-terminated in <code>out</code>. Returns 0, with <code>*where = MF_FAILED</code>, when it adds nothing or <code>cap</code> is too small.</li></ul></li><li>Rules:<ul><li>Search only between <code>&lt;TOPMENU&gt;</code> and its <code>&lt;/TOPMENU&gt;</code>, never <code>TOPMENU_TRIAL</code>. Skip <code>&lt;!-- … --&gt;</code> comments everywhere. Match tag and attribute names case-insensitively, with either quote character.</li><li>In that block's <code>&lt;OPTIONS</code> element: if a <code>BUTTON</code> named <code>plugins</code> already exists, the button isn't added again. Otherwise the button line goes after the end of the <code>BUTTON</code> named <code>workshop</code> (its <code>/&gt;</code> or <code>&lt;/BUTTON&gt;</code>), or else before the line holding the <code>BUTTON</code> named <code>back</code>.</li><li>The inserted line starts on a new line, with the indentation of the <code>workshop</code> line (or the <code>back</code> line), and uses the file's line ending (CRLF when the text has any <code>\r\n</code>, else LF).</li><li>The panel element <code>PLUGINS</code> goes before <code>&lt;/TOPMENU&gt;</code>, unless that block already has one.</li><li>No <code>&lt;TOPMENU&gt;</code> block, no <code>OPTIONS</code> element, or neither <code>workshop</code> nor <code>back</code> means <code>MF_FAILED</code>.</li><li><code>where</code> describes only the button: <code>MF_ALREADY</code> when a <code>plugins</code> button was already there (the panel is still added if it was missing). When nothing at all is added, the text comes back unchanged with <code>MF_ALREADY</code>.</li></ul></li><li>Exact button line: <code>&lt;BUTTON name="plugins" title="Plugins" width="454" height="35"/&gt;</code></li><li>Exact panel element (4-space base indent; the line endings follow the file):</li></ul>
+<pre><code class="lang-xml">    &lt;PLUGINS name="Plugins" title="Plugins" left="30" top="40" width="548" height="768"&gt;
+      &lt;STYLE CHILD="0" TOP="1"/&gt;
+      &lt;IFACETEXLOAD id="TEX_TOPMENU_0" sort="0" file=".\art\iface_wrapper1.tga" pixformat="PF_32"/&gt;
+      &lt;IFACETEX name="back" texture="TEX_TOPMENU_0" left="0" top="0" width="1024" height="768"/&gt;
+      &lt;IFACETEXLOAD id="TEX_PLUGINS_1" file=".\art\wrapper_pieces_02.tga"/&gt;
+      &lt;IFACETEX name="check_off" texture="TEX_PLUGINS_1" left="1" top="1" width="25" height="22"/&gt;
+      &lt;IFACETEX name="check_on" texture="TEX_PLUGINS_1" left="1" top="70" width="25" height="22"/&gt;
+      &lt;IFACERECT name="plugin_list" left="41" top="114" width="454" height="328"/&gt;
+      &lt;IFACERECT name="plugin_notice" left="41" top="446" width="454" height="40"/&gt;
+      &lt;POSITIONING x="41" y="492"&gt;
+        &lt;POSITIONING inc_y="36"&gt;
+          &lt;BUTTON name="plugins_up" title="Move Up" width="454" height="35"/&gt;
+          &lt;BUTTON name="plugins_down" title="Move Down" width="454" height="35"/&gt;
+          &lt;BUTTON name="plugins_apply" title="Apply and Restart" width="454" height="35"/&gt;
+          &lt;BUTTON name="back" title="Back" width="454" height="35"/&gt;
+        &lt;/POSITIONING&gt;
+      &lt;/POSITIONING&gt;
+    &lt;/PLUGINS&gt;</code></pre>
+<ul class="steps"><li><label class="step"><input type="checkbox" data-box="task-2-1"><span><strong>Step 1: Write the failing tests.</strong> The fixtures are short synthetic texts in the test file, shaped like the stock file:</span></label><ul><li><code>&lt;ROOT&gt;</code> holds a <code>&lt;TOPMENU&gt;</code> with <code>MAINMENU</code> and <code>OPTIONS</code> (seven buttons, the <code>workshop</code> line indented with tabs and spaces), then a <code>&lt;TOPMENU_TRIAL&gt;</code> whose <code>OPTIONS</code> has no <code>workshop</code> button.</li><li>Include one commented-out <code>BUTTON</code> line. CRLF unless the test says otherwise.</li><li>Never copy the game's own file into the repo.</li></ul></li></ul>
+<pre><code class="lang-c">TEST(mf_after_workshop)            /* where == MF_AFTER_WORKSHOP; out contains "...height=\"35\"/&gt;\r\n\t\t  &lt;BUTTON name=\"plugins\"" right after
+                                      the workshop element; exactly one "name=\"plugins\"" in out; TOPMENU_TRIAL text byte-identical */
+TEST(mf_panel_before_topmenu_end)  /* "&lt;PLUGINS name=\"Plugins\"" occurs once, after "&lt;/OPTIONS&gt;" and before the first "&lt;/TOPMENU&gt;" */
+TEST(mf_above_back_without_workshop)  /* no workshop in OPTIONS: where == MF_ABOVE_BACK; the button line directly precedes the back line */
+TEST(mf_skips_comments)            /* a commented workshop button before the real one: inserted after the real one;
+                                      only a commented workshop: MF_ABOVE_BACK */
+TEST(mf_single_quotes_and_case)    /* &lt;button NAME='workshop' .../&gt; inside &lt;options ...&gt;: MF_AFTER_WORKSHOP */
+TEST(mf_keeps_lf)                  /* an LF-only text: out contains no '\r' */
+TEST(mf_idempotent)                /* feeding out back in: where == MF_ALREADY, same text */
+TEST(mf_no_options_fails)          /* no OPTIONS in TOPMENU: returns 0, where == MF_FAILED */
+TEST(mf_small_cap_fails)           /* cap = len + 10: returns 0, MF_FAILED */</code></pre>
+<ul class="steps"><li><label class="step"><input type="checkbox" data-box="task-2-2"><span><strong>Step 2: Run</strong> the tests. Expected: link errors for <code>menufile_add_plugins</code>.</span></label></li><li><label class="step"><input type="checkbox" data-box="task-2-3"><span>**Step 3: Implement <code>menufile.c</code>.** It's a forward scan with a "skip comment" helper and a helper that reads the <code>name</code> attribute of the element starting at a <code>&lt;</code>. No XML library.</span></label></li><li><label class="step"><input type="checkbox" data-box="task-2-4"><span><strong>Step 4: Run</strong> the tests. Expected: all pass (78).</span></label></li><li><label class="step"><input type="checkbox" data-box="task-2-5"><span><strong>Step 5: Commit</strong>: <code>git commit -m "Menu file: add the Plugins button and panel to topmenu.xml text (menufile.c)"</code>.</span></label></li></ul>
+</section>
+<section class="task" id="task-3"><h3><span class="num"><span class="lbl">Task</span>3</span><span class="ttl">The panel model</span><span class="prog" data-prog="task-3"></span></h3>
+<p><strong>Files:</strong></p>
+<ul><li>Create: <code>src/loader/panel.c</code>, <code>src/loader/panel.h</code></li><li>Test: <code>tests/test_panel.c</code></li></ul>
+<p><strong>Interfaces:</strong></p>
+<ul><li>Consumes:<ul><li><code>LoaderPlugin</code> and <code>ORDER_MAX</code> (<code>loader/loader.h</code>, <code>loader/order.h</code>).</li><li><code>OrderItem</code> and <code>order_serialize</code> (<code>loader/order.h</code>).</li></ul></li><li>Produces (<code>panel.h</code>):</li></ul>
+<pre><code class="lang-c">#define PANEL_INTRO_H 36   /* intro: two 16-px lines and a 4-px gap above the first row */
+#define PANEL_ROW_H   24
+#define PANEL_LINE_H  16   /* one details line */
+#define PANEL_BOX_X   28   /* check box, from the list's left edge; 25 x 22, vertically centred in the row */
+#define PANEL_BOX_W   25
+#define PANEL_NAME_X  60
+#define PANEL_WRAP    60   /* characters per description line, at most 2 lines, "..." when cut */
+
+typedef struct PanelRow {
+    wchar_t id[64];
+    char name[64], version[32], author[64], description[256], reason[128];
+    int enabled, is_new, failed, loaded, hooks;
+} PanelRow;
+
+typedef struct Panel {
+    PanelRow rows[ORDER_MAX];
+    int n, selected, scroll, safe_start, save_failed;
+    wchar_t start_ids[ORDER_MAX][64];  /* the order and on/off state read at this start */
+    int start_enabled[ORDER_MAX];
+} Panel;
+
+typedef struct PanelSlot { int row, y, h; } PanelSlot;   /* y from the list's top */
+
+void panel_init(Panel *p, const LoaderPlugin *plugins, int n, const int *hooks, int safe_start);
+void panel_select(Panel *p, int row);           /* -1 clears */
+void panel_toggle(Panel *p, int row);
+int  panel_move(Panel *p, int delta);           /* the selected row, -1 up / +1 down; 1 if it moved; selection follows */
+int  panel_changed(const Panel *p);
+int  panel_details(const Panel *p, int row, char lines[4][128]);   /* the line count */
+int  panel_layout(const Panel *p, int list_h, PanelSlot *out, int max);  /* visible rows only */
+int  panel_hit(const Panel *p, int list_h, int x, int y, int *on_box);  /* row or -1; x,y from the list's top-left */
+void panel_scroll(Panel *p, int list_h, int notches);  /* positive = toward row 0; clamped */
+const char *panel_notice(const Panel *p);       /* NULL or one of the notices in the copy table */
+int  panel_save(Panel *p, const wchar_t *path); /* writes order_serialize text; 0 and save_failed = 1 on failure */</code></pre>
+<ul><li>Rules:<ul><li><code>failed = enabled &amp;&amp; reason[0]</code>; <code>loaded = (state == LP_LOADED)</code>; <code>hooks[i]</code> belongs to the plugin at <code>i</code>.</li><li>The details lines, in this order: <code>by &lt;author&gt;</code> when there's an author; the description wrapped at <code>PANEL_WRAP</code>; then one status line:<ul><li>failed: <code>Failed: &lt;reason&gt;</code>;</li><li>turned off: <code>Turned off.</code>;</li><li>safe start and not loaded: <code>Not loaded in this start.</code>;</li><li>otherwise the hooks line.</li></ul></li><li>Only the selected row has details. Its slot height is <code>PANEL_ROW_H + lines * PANEL_LINE_H + 4</code>.</li><li>Rows start at <code>PANEL_INTRO_H</code>.</li><li><code>panel_notice</code> gives priority to: save failed, then safe start, then changed.</li></ul></li></ul>
+<ul class="steps"><li><label class="step"><input type="checkbox" data-box="task-3-1"><span><strong>Step 1: Write the failing tests</strong> on a three-plugin array: <code>A</code> loaded with 2 hooks, <code>B</code> disabled, <code>C</code> with the reason <code>"LoadLibrary error 193"</code>.</span></label></li></ul>
+<pre><code class="lang-c">TEST(panel_init_rows)              /* n == 3; rows[2].failed == 1; rows[1].enabled == 0; selected == -1; panel_changed == 0 */
+TEST(panel_toggle_twice_unchanged) /* toggle(1) -&gt; changed 1; toggle(1) -&gt; changed 0 */
+TEST(panel_move_follows_selection) /* select(2); move(-1) == 1 -&gt; rows[1].id == L"C", selected == 1, changed 1; move(+1) -&gt; changed 0 */
+TEST(panel_move_at_edges)          /* select(0); move(-1) == 0; select(2); move(+1) == 0; no selection: move == 0 */
+TEST(panel_details_lines)          /* A with author "Ann", description 70 chars: lines = "by Ann", 2 wrapped lines, "Hooks 2 game functions." */
+TEST(panel_details_wraps_utf8)     /* a description of 100 two-byte characters: no line ends inside a character; at most 2 lines; the 2nd ends "..." */
+TEST(panel_details_status)         /* B: "Turned off."; C: "Failed: LoadLibrary error 193"; 1 hook: "Hooks 1 game function." */
+TEST(panel_hit_rows)               /* list_h 328: y = 36 + 5 -&gt; row 0; y = 36 + 24 + 5 -&gt; row 1; x = 30 (box) -&gt; on_box 1; x = 70 -&gt; 0; y = 10 -&gt; -1 */
+TEST(panel_hit_below_details)      /* select(0) with 4 detail lines: row 1 starts at 36 + 24 + 4*16 + 4 */
+TEST(panel_hit_scrolled)           /* 20 rows, scroll(-5 notches) -&gt; scroll == 5; y = 36 + 5 -&gt; row 5; scroll clamps at n - visible */
+TEST(panel_notice_order)           /* unchanged: NULL; changed: the "Not applied yet." text; safe_start: the safe start text; save_failed wins */
+TEST(panel_save_writes_order)      /* move C to top, turn B off, save to temp file: text == order_serialize of C, A, -B */
+TEST(panel_save_fails_cleanly)     /* save to an existing directory's path: returns 0, save_failed == 1, notice is the save-failed text */
+TEST(panel_empty)                  /* n == 0: hit == -1, layout == 0, notice NULL */</code></pre>
+<ul class="steps"><li><label class="step"><input type="checkbox" data-box="task-3-2"><span><strong>Step 2: Run.</strong> Expected: link errors for <code>panel_*</code>.</span></label></li><li><label class="step"><input type="checkbox" data-box="task-3-3"><span>**Step 3: Implement <code>panel.c</code>.** <code>panel_save</code> builds <code>OrderItem</code>s from the rows (<code>is_new</code> = 0) and writes <code>order_serialize</code>'s text with <code>_wfopen(path, L"wb")</code>.</span></label></li><li><label class="step"><input type="checkbox" data-box="task-3-4"><span><strong>Step 4: Run.</strong> Expected: all pass (92).</span></label></li><li><label class="step"><input type="checkbox" data-box="task-3-5"><span><strong>Step 5: Commit</strong>: <code>git commit -m "Panel model: rows, edits, layout, hit test, texts, save (panel.c)"</code>.</span></label></li></ul>
+</section>
+<section class="task" id="task-4"><h3><span class="num"><span class="lbl">Task</span>4</span><span class="ttl">Hook counts and the loader's start sequence</span><span class="prog" data-prog="task-4"></span></h3>
+<p><strong>Files:</strong></p>
+<ul><li>Modify: <code>src/loader/hooks.c</code>, <code>src/loader/hooks.h</code>, <code>src/loader/loader.c</code>, <code>src/loader/loader.h</code></li><li>Create: <code>src/loader/menu.h</code> (the declaration only; <code>menu.c</code> comes in task 5)</li><li>Test: <code>tests/test_hooks.c</code>, <code>tests/test_loader.c</code></li></ul>
+<p><strong>Interfaces:</strong></p>
+<ul><li>Consumes: <code>ss_*</code> (task 1); <code>ev_register(int owner, RonEvent ev, RonEventFn fn, void *user)</code>.</li><li>Produces:<ul><li><code>int hm_owner_count(int owner)</code>: how many distinct addresses the owner has a link or a patch at.</li><li><code>int loader_safe_start(void)</code>.</li><li><code>int menu_install(uintptr_t delta)</code> (declared in <code>menu.h</code>): returns how many of its 6 hooks succeeded. For the tests, link a stub that returns 0.</li></ul></li><li>In <code>loader_run</code>, after <code>prepare()</code> for every plugin and before the symbol map:<ol><li><code>ss_begin(g_plugins_dir, culprit, 64)</code> sets <code>g_safe</code>.</li><li>When <code>g_safe</code> is set: log <code>the last start did not reach the menu: no plugins this start</code>, plus <code> (it stopped while loading &lt;name&gt;)</code> when <code>culprit</code> names an enabled plugin. Give that plugin the reason <code>the game stopped while it loaded</code> (via <code>fail()</code>). Load no plugin.</li><li>Otherwise, call <code>ss_loading(id)</code> before each <code>load_plugin(i)</code> and <code>ss_loaded()</code> after the loop.</li><li>Before the loop: <code>ev_register(0, RON_EV_POST_INIT, on_menu_up, NULL)</code>, where <code>on_menu_up</code> calls <code>ss_menu_reached()</code>.</li><li>After the loop and before <code>hm_lock()</code>: when <code>cfg-&gt;install_game_hooks</code> is set, log <code>menu hooks: %d of 6 installed</code> with <code>menu_install(g_game.delta)</code>.</li></ol></li><li><strong>Test-suite rule:</strong> a test that runs <code>loader_run</code> twice on one folder fires <code>ev_fire(RON_EV_POST_INIT, NULL)</code> in between, because the menu was reached. Adjust the existing tests that do this.</li></ul>
+<ul class="steps"><li><label class="step"><input type="checkbox" data-box="task-4-1"><span><strong>Step 1: Write the failing tests.</strong></span></label></li></ul>
+<pre><code class="lang-c">TEST(hm_owner_count_counts_addresses)  /* owner 1: hm_inline on hk_add1 and hm_patch elsewhere -&gt; 2; owner 2: 0 */
+TEST(run_safe_start_after_stop)        /* testgame copy; write plugins\.start-marker "loading Good\r\n"; loader_run loads 0;
+                                          loader_safe_start() == 1; Good's reason == "the game stopped while it loaded" */
+TEST(run_normal_after_menu)            /* loader_run (normal); ev_fire(RON_EV_POST_INIT, NULL); marker gone; loader_run again loads Good */
+TEST(run_marker_after_loading)         /* after a normal loader_run and before POST_INIT, the marker reads "loaded\r\n" */</code></pre>
+<ul class="steps"><li><label class="step"><input type="checkbox" data-box="task-4-2"><span><strong>Step 2: Run.</strong> Expected: the new tests fail; the existing ones still pass.</span></label></li><li><label class="step"><input type="checkbox" data-box="task-4-3"><span><strong>Step 3: Implement</strong> <code>hm_owner_count</code>, the sequence above, and <code>loader_safe_start</code>. Put the test stub for <code>menu_install</code> in <code>tests/stub_menu.c</code>, and keep <code>menu.c</code> out of the test build: <code>build.ps1</code>'s test source list replaces <code>src\loader\*.c</code> with that list minus <code>menu.c</code>, <code>menu_draw.c</code> and <code>game.c</code>.</span></label></li><li><label class="step"><input type="checkbox" data-box="task-4-4"><span><strong>Step 4: Run.</strong> Expected: all pass (96).</span></label></li><li><label class="step"><input type="checkbox" data-box="task-4-5"><span><strong>Step 5: Commit</strong>: <code>git commit -m "Loader: safe start, hook counts per owner, menu hooks after plugins"</code>.</span></label></li></ul>
+</section>
+<section class="task" id="task-5"><h3><span class="num"><span class="lbl">Task</span>5</span><span class="ttl">Game calls and the menu hooks</span><span class="prog" data-prog="task-5"></span></h3>
+<p><strong>Files:</strong></p>
+<ul><li>Create: <code>src/loader/game.c</code>, <code>src/loader/game.h</code>, <code>src/loader/menu.c</code></li><li>Modify: <code>build.ps1</code> (if task 4's test list needs it)</li></ul>
+<p><strong>Interfaces:</strong></p>
+<ul><li>Consumes: <code>menufile_add_plugins</code> (task 2), <code>Panel</code> and its functions (task 3), <code>loader_plugins</code>, <code>loader_safe_start</code>, <code>hm_owner_count</code>, <code>hm_inline</code> and <code>hm_ptr</code> (task 4).</li><li>Produces (<code>game.h</code>; every function uses the conventions below, each checked in the ledgers):</li></ul>
+<div class="tbl"><table><thead><tr><th>Wrapper</th><th>Game function</th><th>Convention</th></tr></thead><tbody><tr><td><code>void game_init(uintptr_t delta)</code></td><td></td><td></td></tr><tr><td><code>void gs_from_ascii(GString *s, const char *a)</code></td><td><code>String::String(char const*)</code> <code>0xA1D660</code></td><td>thiscall(s, a)</td></tr><tr><td><code>void gs_from_static(GString *s, const wchar_t *w)</code></td><td><code>String::String(wchar_t const*)</code> <code>0xA1EDD0</code></td><td>thiscall(s, w), ret 4; keeps <code>w</code></td></tr><tr><td><code>void gs_close(GString *s)</code></td><td><code>String::close</code> <code>0xA1CF40</code></td><td>ECX only</td></tr><tr><td><code>int gs_is(const void *s, const char *ascii)</code></td><td><code>String::str()</code> <code>0xA1F0A0</code> (thiscall → <code>const wchar_t*</code>); length = u16 at <code>+8</code></td><td>case-insensitive compare</td></tr><tr><td><code>int game_sub_menu(void *topmenu, const char *panel)</code></td><td><code>TopMenu::sub_menu</code> <code>0x59C030</code></td><td>thiscall(topmenu, String*), ret 4</td></tr><tr><td><code>void game_restart(void)</code></td><td><code>WorkshopWin::reloadAssets</code> <code>0x6AC3E0</code></td><td>no args, plain ret, ECX unused</td></tr><tr><td><code>int game_data_path(const wchar_t *name, wchar_t *out, int cap)</code></td><td><code>L"data\\" + name</code> through <code>String::prepend_content_dir</code> <code>0xA1D690</code></td><td>thiscall(src, ret String*, force 0, file "loader", line 0), ret 0x10; result copied to <code>out</code></td></tr><tr><td><code>void game_click(void)</code></td><td><code>SoundGlobal::play</code> <code>0x97F770</code></td><td>category <code>0xAF</code> by value, ret 4, ECX ignored</td></tr></tbody></table></div>
+<p><code>typedef struct { unsigned char b[0x14]; } __attribute__((aligned(4))) GString;</code></p>
+<ul><li><code>menu.c</code>: <code>int menu_install(uintptr_t delta)</code> calls <code>game_init(delta)</code>, then installs these six owner-0 hooks (static addresses + delta):</li></ul>
+<div class="tbl"><table><thead><tr><th>Hook</th><th>Where</th><th>Signature / expected</th><th>Detour (gcc)</th></tr></thead><tbody><tr><td>inline</td><td><code>GetTopMenuXMLFile</code> <code>0x59F7C0</code></td><td>sig <code>55 8B EC 6A FF 68 ?? ?? ?? ??</code> (mask 0 on the last 4), stolen 5</td><td><code>void *THISCALL d_menu_file(void *out)</code></td></tr><tr><td>inline</td><td><code>TopMenu::check_result</code> <code>0x59B1E0</code></td><td>sig <code>55 8B EC 64 A1 00 00 00 00</code>, stolen 9</td><td><code>int THISCALL d_check_result(void *topmenu, const void *name)</code></td></tr><tr><td>slot</td><td>vtable <code>0xB3F3F4</code> <code>+0xB8</code></td><td>expected <code>0x59EE80</code></td><td><code>void THISCALL d_sel_redraw(void *sel)</code> (task 6)</td></tr><tr><td>slot</td><td><code>+0xD8</code></td><td>expected <code>0x41C180</code></td><td><code>void THISCALL d_sel_left_click(void *sel, int x, int y)</code> (task 6)</td></tr><tr><td>slot</td><td><code>+0x114</code></td><td>expected <code>0x41C360</code></td><td><code>void THISCALL d_sel_wheel(void *sel, int delta, int x, int y)</code> (task 6)</td></tr><tr><td>slot</td><td><code>+0x2AC</code></td><td>expected <code>0x59E930</code></td><td><code>void THISCALL d_sel_button(void *sel, const void *name)</code></td></tr></tbody></table></div>
+<ul><li><strong>Behaviour:</strong><ul><li>**<code>d_menu_file</code>, first call:**<ol><li>Call the chain (<code>o_menu_file(&amp;tmp)</code>) and read its name.</li><li>When the name has no <code>\</code> or <code>/</code>, resolve it with <code>game_data_path</code>; otherwise use it as it is. Relative paths are relative to the game folder.</li><li>Read that file, run <code>menufile_add_plugins</code>, and on success write the text to <code>&lt;game&gt;\plugins\.cache\topmenu.xml</code> (create <code>.cache</code>).</li><li>Log <code>menu: Plugins button after Steam Workshop</code> / <code>above Back</code> / <code>already there</code>, or <code>menu: no Plugins button (&lt;why&gt;)</code>.</li><li><code>gs_close(&amp;tmp)</code>.</li></ol></li><li>**<code>d_menu_file</code>, every call:** if the cache was written, <code>gs_from_static(out, g_cache_path)</code> (a static buffer) and return <code>out</code>; otherwise <code>return o_menu_file(out)</code>.<ul><li><strong>Known limit:</strong> a mod's language-suffixed <code>topmenu.xml.N</code> isn't looked for (ledger F8).</li></ul></li><li>**<code>d_check_result</code>:**<ul><li><code>plugins</code>: <code>panel_init(&amp;g_panel, …)</code> with <code>hm_owner_count(i + 1)</code> per row, then <code>return game_sub_menu(topmenu, "PLUGINS")</code>.</li><li><code>plugins_apply</code>: <code>panel_save(&amp;g_panel, &lt;plugins&gt;\load-order.txt)</code>. On success: log <code>panel: applied, restarting</code>, call <code>game_restart()</code> and return -1. On failure, return -1 (the panel opens again, showing the save-failed notice).</li><li>Any other name: <code>return o_check_result(topmenu, name)</code>.</li></ul></li><li>**<code>d_sel_button</code>:**<ul><li>When <code>gs_is(sel + 0x4C0, "PLUGINS")</code> (<code>TopMenuSelection.current_menu</code>):<ul><li><code>plugins_up</code> / <code>plugins_down</code>: <code>panel_move(&amp;g_panel, ∓1)</code>, <code>game_click()</code>, return without the original; the panel stays.</li><li><code>plugins_apply</code> with neither <code>panel_changed</code> nor <code>safe_start</code>: <code>game_click()</code>, return.</li></ul></li><li>Everything else: <code>o_sel_button(sel, name)</code>.</li></ul></li></ul></li></ul>
+<ul class="steps"><li><label class="step"><input type="checkbox" data-box="task-5-1"><span>**Step 1: Write <code>game.c</code>, <code>game.h</code> and <code>menu.c</code>** (no unit test: these need the game; their logic is in tasks 2–3).</span></label></li><li><label class="step"><input type="checkbox" data-box="task-5-2"><span><strong>Step 2: Build</strong> with <code>powershell -File build.ps1 -Test</code>. Expected: <code>built shfolder.dll</code> and all tests pass. <code>pkg_exports_two_forwarders</code> must still pass (nothing new exported).</span></label></li><li><label class="step"><input type="checkbox" data-box="task-5-3"><span><strong>Step 3: Commit</strong>: <code>git commit -m "Menu hooks: generated topmenu.xml, Plugins button and panel, Move Up/Down, Apply and Restart"</code>.</span></label></li></ul>
+</section>
+<section class="task" id="task-6"><h3><span class="num"><span class="lbl">Task</span>6</span><span class="ttl">Drawing the list and taking its clicks</span><span class="prog" data-prog="task-6"></span></h3>
+<p><strong>Files:</strong></p>
+<ul><li>Create: <code>src/loader/menu_draw.c</code></li><li>Modify: <code>src/loader/game.c</code>, <code>src/loader/game.h</code>, <code>src/loader/menu.c</code></li></ul>
+<p><strong>Interfaces:</strong></p>
+<ul><li>Consumes: <code>Panel</code>, <code>panel_layout</code>, <code>panel_hit</code>, <code>panel_scroll</code>, <code>panel_details</code>, <code>panel_notice</code>, <code>panel_select</code>, <code>panel_toggle</code> (task 3).</li><li>Produces: <code>void menu_draw_list(void *sel)</code> (called by <code>d_sel_redraw</code> after the original), plus more <code>game.h</code> wrappers:</li></ul>
+<div class="tbl"><table><thead><tr><th>Wrapper</th><th>Game function</th><th>Convention</th></tr></thead><tbody><tr><td><code>const short *game_find_rect(void *win, const char *name)</code></td><td>vt <code>+0x488</code></td><td>thiscall(win, String const&amp;, -1, NULL), ret 0xC; <code>short left, right, top, bottom</code>, window-local; NULL when missing</td></tr><tr><td><code>void *game_find_tex(void *win, const char *name)</code></td><td>vt <code>+0xA4</code></td><td>same</td></tr><tr><td><code>void game_tex(void *tex, int x, int y, uint32_t rgba)</code></td><td><code>IFaceRenderManager::add</code> <code>0x51F440</code></td><td>ECX = <code>0xEBD1C0</code>; (tex, x, y, color, type 1); ret 0x14</td></tr><tr><td><code>void game_fill(const short r[4], uint32_t rgba)</code></td><td><code>IFaceRenderManager::add</code> <code>0x51F3D0</code></td><td>ECX = <code>0xEBD1C0</code>; (NULL, r, color, 5); ret 0x10</td></tr><tr><td><code>int game_text(void *win, const char *utf8, const short r[4], int right, const void *color, int size)</code></td><td><code>FontFamily::get(size, -1)</code> <code>0x522810</code> (ECX <code>0xED8160</code>, ret 8); on Buffer = <code>win + 0x154</code>: <code>set_font(font, 0, 0)</code> <code>0x50DAB0</code> (ret 0xC), <code>set_text_color(color, BLACK, -1, 0)</code> <code>0x50DAF0</code> (ret 0x10), <code>write_l</code> <code>0x50F6E0</code> or <code>write_right_l</code> <code>0x50FA40</code> (String const&amp;, rect, length; ret 0xC)</td><td>graphsys (<code>[0xE335A0]</code>) depth <code>+0x164</code> raised by 1 around the text and restored. Returns the left x from <code>write_right_l</code>, else 0</td></tr></tbody></table></div>
+<ul><li>Colours: <code>WHITE</code> <code>0xC8D26C</code>, <code>GREY</code> <code>0xC8D218</code>, <code>RED</code> <code>0xC8D248</code>, <code>YELLOW</code> <code>0xC8D278</code>, <code>BLACK</code> <code>0xC8D260</code> (12-byte Color; its first dword is the <code>rgba</code> value for <code>game_tex</code>/<code>game_fill</code>).</li><li><strong>Drawing</strong> (Workshop row style, ledger draw F8 and F9), relative to <code>game_find_rect(sel, "plugin_list")</code> = <code>L</code>:<ul><li>The intro at the top, in 2 lines, GREY, size 12.</li><li><strong>Each visible slot:</strong><ul><li>The number, right-aligned in <code>[0, 24)</code>.</li><li><code>check_off</code> at <code>(PANEL_BOX_X, row centre - 11)</code>, then <code>check_on</code> over it when enabled.</li><li>The name at <code>PANEL_NAME_X</code>, clipped left of the version.</li><li>The version right-aligned.</li><li>The tag (<code>new</code> YELLOW, <code>failed</code> RED) right-aligned before the version.</li></ul></li><li><strong>Text colour:</strong> WHITE when enabled, GREY when off.</li><li><strong>The selected row:</strong> filled with its text colour, its text BLACK. Its details lines are GREY at <code>PANEL_NAME_X</code>, size 12.</li><li><strong>With no rows:</strong> the empty text in GREY.</li><li><strong>The notice</strong> goes in <code>game_find_rect(sel, "plugin_notice")</code>, YELLOW, size 12, wrapped at 60 characters.</li></ul></li><li><strong>Clicks:</strong><ul><li>**<code>d_sel_left_click</code>:** calls the original first. Then, on the Plugins panel, when (x, y) is inside <code>L</code>: <code>panel_hit</code> on (x − L.left, y − L.top). On a row: when <code>on_box</code>, <code>panel_toggle</code>, otherwise <code>panel_select</code>; then <code>game_click()</code>.</li><li>**<code>d_sel_wheel</code>:** on the Plugins panel, when inside <code>L</code>: <code>panel_scroll(&amp;g_panel, L.bottom - L.top, delta / 120 when |delta| &gt;= 120, else delta)</code>. Otherwise call the original.</li><li><strong>Redraw:</strong> none needed. The modal loop redraws every frame (ledger draw F11).</li></ul></li></ul>
+<ul class="steps"><li><label class="step"><input type="checkbox" data-box="task-6-1"><span>**Step 1: Write <code>menu_draw.c</code>** and the wrappers; wire <code>d_sel_redraw</code>, <code>d_sel_left_click</code> and <code>d_sel_wheel</code> in <code>menu.c</code>.</span></label></li><li><label class="step"><input type="checkbox" data-box="task-6-2"><span><strong>Step 2: Build and test.</strong> Expected: all tests pass, and <code>pkg_exports_two_forwarders</code> still passes.</span></label></li><li><label class="step"><input type="checkbox" data-box="task-6-3"><span><strong>Step 3: Commit</strong>: <code>git commit -m "Plugins panel: draw the list, clicks and wheel"</code>.</span></label></li></ul>
+</section>
+<section class="task" id="task-7"><h3><span class="num"><span class="lbl">Task</span>7</span><span class="ttl">In the game</span><span class="prog" data-prog="task-7"></span></h3>
+<p><strong>Files:</strong> none (the run's findings go to <code>decomp/ron-ee-6674863f/notes/2026-11-24-loader-runs.txt</code>, root repo).</p>
+<ul class="steps"><li><label class="step"><input type="checkbox" data-box="task-7-1"><span><strong>Step 1: Ask the user</strong> before writing into the game folder: deploy <code>shfolder.dll</code> and HelloPlugin and run the game.</span></label></li><li><label class="step"><input type="checkbox" data-box="task-7-2"><span><strong>Step 2: Unattended run</strong> (<code>rondbg start</code>, <code>wait menu</code>, <code>stop</code>), then read <code>plugins\loader.log</code>. Expected:</span></label><ul><li><code>menu hooks: 6 of 6 installed</code>;</li><li><code>menu: Plugins button after Steam Workshop</code>;</li><li><code>plugins\.cache\topmenu.xml</code> holds one <code>name="plugins"</code> button and one <code>&lt;PLUGINS</code>;</li><li>after <code>stop</code>, the marker is gone (<code>post_init</code> was reached).</li></ul></li><li><label class="step"><input type="checkbox" data-box="task-7-3"><span><strong>Step 3: Safe-start run.</strong> Write <code>plugins\.start-marker</code> = <code>loading HelloPlugin</code>, start, <code>wait menu</code>, stop. Expected: the log says <code>no plugins this start</code> and <code>HelloPlugin</code> gets the reason. The next run is normal.</span></label></li><li><label class="step"><input type="checkbox" data-box="task-7-4"><span><strong>Step 4: Visual check, by the user.</strong> Ask the user to open Tools &amp; Extras → Plugins and report:</span></label><ul><li>the button sits under Steam Workshop;</li><li>the panel shows HelloPlugin with a ticked box, its number and its version;</li><li>clicking the row unfolds <code>Hooks 1 game function.</code> (or 2);</li><li>the box toggles, and the notice appears;</li><li>Move Up and Move Down move a row without the panel sliding in again;</li><li>Back returns to Tools &amp; Extras, and that panel's Back still reaches the main menu;</li><li>Apply and Restart restarts the game with the new state, as shown in <code>load-order.txt</code>.</li><li>In the restarted game, the Steam overlay (Shift+Tab) and the player's profile still work. The restart isn't started through Steam (design §8); report whether that matters.</li></ul><p>Fix whatever they report through systematic debugging, with a test for any logic error.</p></li><li><label class="step"><input type="checkbox" data-box="task-7-5"><span><strong>Step 5: Commit</strong> the run notes in the root repo.</span></label></li></ul>
+</section>
+<section class="task" id="task-8"><h3><span class="num"><span class="lbl">Task</span>8</span><span class="ttl">Documents</span><span class="prog" data-prog="task-8"></span></h3>
+<p><strong>Files:</strong></p>
+<ul><li>Modify: <code>README.md</code> (the panel; <code>.start-marker</code>, <code>.cache</code>), <code>docs/design.md</code> (§11: item 4 built; §14: the open points the run settled), <code>include/ron_plugin.h</code> (nothing unless the API changed).</li><li>Root <code>CLAUDE.md</code>: the Locations row and the decisions sentence (Plugins under Tools &amp; Extras; automatic safe start). Use the claude-md-improver skill first.</li><li>RoN-Engine-Atlas <code>re/plugin-loaders.html</code>: a section on adding a main-menu button and panel, covering:<ul><li><code>GetTopMenuXMLFile</code> and its 5 callers;</li><li>the <code>sub_menu</code> loop and <code>check_result</code>'s results (-1, <code>0x15</code>);</li><li><code>on_button_clicked</code> and <code>release_modal</code>;</li><li>the game's own restart through <code>reloadAssets</code>.</li></ul><p>Plus an Updates entry. Follow the frontend-design skill and <code>atlas_finish.py</code>.</p></li><li>Memory: <code>plugin-system-design.md</code>.</li></ul>
+<ul class="steps"><li><label class="step"><input type="checkbox" data-box="task-8-1"><span><strong>Step 1: Write the documents.</strong> No local paths or tools on the Atlas; engine facts only, each with its evidence label.</span></label></li><li><label class="step"><input type="checkbox" data-box="task-8-2"><span><strong>Step 2: Checks</strong>: <code>crlf-convert --check</code>; <code>atlas_finish.py --pages plugin-loaders</code> all ok.</span></label></li><li><label class="step"><input type="checkbox" data-box="task-8-3"><span><strong>Step 3: Commit</strong> each repo; then merge per <code>CLAUDE.md</code>.</span></label></li></ul>
+<hr>
+</section>
+<section class="sec" id="later-plans"><h2>Later plans</h2>
+<p>The file service (it takes over the menu file cache), localisation of the loader's texts, and the multiplayer check (design §10).</p>
+</section>
+<footer>Generated from <code>docs/plans/2026-11-24-plugins-panel.md</code>. Checkmarks are saved in this browser only.</footer>
+</main>
+<script>
+(function(){
+var KEY=document.body.dataset.plan+':';
+var boxes=[].slice.call(document.querySelectorAll('input[data-box]'));
+function load(b){var v=localStorage.getItem(KEY+b.dataset.box);b.checked=v===null?b.hasAttribute('data-default-checked'):v==='1';}
+function update(){
+  document.querySelectorAll('section.task').forEach(function(sec){
+    var bs=sec.querySelectorAll('input[data-box]'),n=bs.length,d=0;
+    bs.forEach(function(b){if(b.checked)d++;});
+    var p=sec.querySelector('.prog');if(p)p.textContent=d+' of '+n+' steps';
+    sec.classList.toggle('complete',n>0&&d===n);
+    var li=document.querySelector('nav [data-task="'+sec.id+'"]');
+    if(li){li.style.setProperty('--p',n?d/n:0);li.classList.toggle('done',n>0&&d===n);
+      var c=li.querySelector('.cnt');if(c)c.textContent=d+'/'+n;}
+  });
+}
+boxes.forEach(function(b){load(b);b.addEventListener('change',function(){localStorage.setItem(KEY+b.dataset.box,b.checked?'1':'0');update();});});
+var clr=document.getElementById('clear');
+if(clr)clr.addEventListener('click',function(){boxes.forEach(function(b){localStorage.removeItem(KEY+b.dataset.box);b.checked=false;});update();});
+update();
+})();
+</script>
+</body>
+</html>
