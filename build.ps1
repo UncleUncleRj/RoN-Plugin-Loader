@@ -1,5 +1,5 @@
 # Builds the RoN Plugin Loader with zig cc (python -m pip install ziglang).
-#   powershell -File build.ps1          build the DLLs and the example plugin into build\
+#   powershell -File build.ps1          build shfolder.dll (the loader, one file) and the example plugin into build\
 #   powershell -File build.ps1 -Test    also build build\tests.exe (+ build\testgame\) and run the tests
 param(
     [switch]$Test,
@@ -24,13 +24,10 @@ function Invoke-CC([string]$what, [string[]]$ccArgs) {
     if ($LASTEXITCODE) { throw "build failed: $what" }
 }
 
-# The bootstrap (shfolder.dll) and the loader (RonPluginLoader.dll)
-$boot = @('src\bootstrap\shfolder.c', 'src\bootstrap\decide.c', 'src\common\identity.c', 'src\bootstrap\shfolder.def') |
-    ForEach-Object { Join-Path $root $_ }
-Invoke-CC 'shfolder.dll' (@('-shared', '-s', '-o', (Join-Path $build 'shfolder.dll')) + $boot + @('-lkernel32', '-lbcrypt'))
-$loaderSrc = @(Get-Sources @('src\loader\*.c', 'src\common\identity.c'))
-Invoke-CC 'RonPluginLoader.dll' (@('-shared', '-s', '-o', (Join-Path $build 'RonPluginLoader.dll')) + $loaderSrc +
-    @('-lkernel32', '-luser32'))
+# The loader, one file (user decision 2026-11-24): shfolder.dll = the start code (src\bootstrap) + the loader (src\loader)
+$dllSrc = @(Get-Sources @('src\bootstrap\*.c', 'src\loader\*.c', 'src\common\*.c')) + @(Join-Path $root 'src\bootstrap\shfolder.def')
+Invoke-CC 'shfolder.dll' (@('-shared', '-s', '-o', (Join-Path $build 'shfolder.dll')) + $dllSrc + @('-lkernel32', '-luser32', '-lbcrypt'))
+Get-ChildItem $build -Filter 'RonPluginLoader.*' | Remove-Item -Force   # left over from the two-file builds
 # The example plugin: build\plugins\HelloPlugin.dll + HelloPlugin.ini
 $bp = Join-Path $build 'plugins'
 New-Item -ItemType Directory -Force $bp | Out-Null
@@ -38,7 +35,7 @@ Invoke-CC 'HelloPlugin.dll' @('-shared', '-s', '-o', (Join-Path $bp 'HelloPlugin
     (Join-Path $root 'plugins\HelloPlugin\HelloPlugin.c'), '-lkernel32')
 Get-ChildItem $bp -Filter 'HelloPlugin.*' -Exclude 'HelloPlugin.dll' | Remove-Item -Force
 Copy-Item (Join-Path $root 'plugins\HelloPlugin\HelloPlugin.ini') $bp
-Write-Output 'built shfolder.dll, RonPluginLoader.dll, plugins\HelloPlugin.dll'
+Write-Output 'built shfolder.dll, plugins\HelloPlugin.dll'
 
 if ($Test) {
     # build\testgame\plugins: test plugins for the loader tests (tests\plugins\*.c and their .ini files)

@@ -270,12 +270,8 @@ int loader_run(const LoaderConfig *cfg)
     return loaded;
 }
 
-void __cdecl RonLoaderStart(void)
+void loader_start(void)
 {
-    static int started;
-    if (started)
-        return;
-    started = 1;
     const uint8_t *image = (const uint8_t *)GetModuleHandleW(NULL);
     static wchar_t dir[MAX_PATH];
     GetModuleFileNameW(NULL, dir, MAX_PATH);

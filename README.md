@@ -2,8 +2,9 @@
 
 A plugin loader for Rise of Nations: Extended Edition (Steam, `riseofnations.exe` build `0x6674863F`).
 
-It loads plugin DLLs from `<game>\plugins\<Name>.dll` (each with a `<Name>.ini`) in an order the player sets on a
-Plugins panel in the main menu. Plugins can replace, add or generate game files, hook game
+The loader is one file, `shfolder.dll`, in the game folder. It loads plugin DLLs from
+`<game>\plugins\<Name>.dll` (each with a `<Name>.ini`) in an order the player sets on a Plugins
+panel in the main menu. Plugins can replace, add or generate game files, hook game
 functions through one shared hook manager, and declare whether they change the simulation, so a
 multiplayer lobby can check that every player runs the same set.
 
@@ -17,22 +18,23 @@ plan into one HTML page for review.
 Needs Python with zig (`python -m pip install ziglang`) and Windows PowerShell.
 
 ```
-powershell -File build.ps1          # build\shfolder.dll, build\RonPluginLoader.dll, build\plugins\HelloPlugin.dll + .ini
+powershell -File build.ps1          # build\shfolder.dll (the loader), build\plugins\HelloPlugin.dll + .ini
 powershell -File build.ps1 -Test    # also builds build\tests.exe and build\testgame\, and runs the tests
 ```
 
 The tests need no game: they cover the ini and load-order files, the symbol map, the hook manager
-(on test functions with known bytes), the events and the whole loading sequence (with test plugins).
+(on test functions with known bytes), the events, the whole loading sequence (with test plugins) and
+the built `shfolder.dll` (the loader is inside it; it exports only its two shell32 forwarders).
 
 To try it in the game, on a developer machine:
 
 ```
-powershell -File tools\dev-install.ps1      # copies the two DLLs and HelloPlugin into the game folder
+powershell -File tools\dev-install.ps1      # copies shfolder.dll and HelloPlugin into the game folder
 powershell -File tools\dev-uninstall.ps1    # removes exactly what dev-install put there
 ```
 
-`dev-install.ps1` refuses to run when a `shfolder.dll` or `RonPluginLoader.dll` it didn't put there is
-already in the game folder; both scripts take `-GameDir <path>`. While installed, the loader writes
+`dev-install.ps1` refuses to run when a `shfolder.dll` it didn't put there is already in the game
+folder; both scripts take `-GameDir <path>`. While installed, the loader writes
 `<game>\plugins\loader.log` at every start, and HelloPlugin logs every event into it.
 
 ## Layout
@@ -40,9 +42,9 @@ already in the game folder; both scripts take `-GameDir <path>`. While installed
 | Path | What |
 |---|---|
 | `include/ron_plugin.h` | The plugin API, the only header a plugin includes |
-| `src/bootstrap/` | `shfolder.dll`: loads at process start, hooks `Main::main`, loads the loader from there |
-| `src/loader/` | `RonPluginLoader.dll`: load order, plugin ini files, symbol map, hook manager, events, API |
-| `src/common/` | Exe identity, shared by both DLLs |
+| `src/bootstrap/` | The start of `shfolder.dll`: loads at process start, hooks `Main::main`, runs the loader from there |
+| `src/loader/` | The loader, built into `shfolder.dll`: load order, plugin ini files, symbol map, hook manager, events, API |
+| `src/common/` | Exe identity |
 | `plugins/HelloPlugin/` | The example plugin |
 | `tests/` | The test program, its test plugins and fixtures |
 | `tools/` | Dev install scripts, `plan_html.py` |

@@ -25,8 +25,10 @@ typedef struct LoaderConfig {
 int loader_run(const LoaderConfig *cfg);   /* returns the number of plugins loaded */
 const LoaderPlugin *loader_plugins(int *count);
 
-/* Called by the bootstrap from the hook at Main::main, on the game's main thread. */
-__declspec(dllexport) void __cdecl RonLoaderStart(void);
+/* Runs the loader for the real game. Called once, from the hook at Main::main (bootstrap/shfolder.c),
+   on the game's main thread, outside the loader lock. Not exported: shfolder.dll exports only its two
+   shell32 forwarders. */
+void loader_start(void);
 
 /* ---- shared with api.c ---- */
 struct RonPlugin {

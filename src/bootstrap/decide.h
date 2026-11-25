@@ -1,4 +1,4 @@
-/* Whether the bootstrap does anything in this process: only in the known game exe. */
+/* Whether shfolder.dll does anything in this process: only in the known game exe. */
 #ifndef RON_DECIDE_H
 #define RON_DECIDE_H
 
