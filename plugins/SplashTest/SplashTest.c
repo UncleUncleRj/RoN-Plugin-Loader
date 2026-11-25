@@ -14,8 +14,8 @@
  * virtual table with load replaced. The copy keeps the entry before the table (the RTTI pointer).
  *
  * The intros do not play when the game starts with +skipIntro (the game's own restart adds it, and
- * so Apply and Restart does), when rise2.ini has SkipIntroMovies=1, or after a click or key press
- * during an earlier intro.
+ * so Apply and Restart does) or when rise2.ini has SkipIntroMovies set. Esc or Space skips every
+ * intro still to come; a mouse click stops only the one playing.
  */
 #include <windows.h>
 #include <stdio.h>
