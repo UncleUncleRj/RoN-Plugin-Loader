@@ -18,7 +18,7 @@ TEST(identity_cbp)
     static uint8_t img[0x400];
     uint32_t ts = 0;
     make_image(img, 0x6674863F, ".cbp");
-    CHECK_EQ(identity_kind(img, &ts), RON_EXE_CBP);
+    CHECK_EQ(identity_kind(img, &ts), RON_EXE_PATCHED);
 }
 
 TEST(identity_other_build)

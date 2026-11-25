@@ -23,7 +23,7 @@ RonExeKind identity_kind(const uint8_t *image, uint32_t *timestamp_out)
     const uint8_t *sec = fh + 20 + rd16(fh + 16);
     for (uint16_t i = 0; i < sections && i < 96; i++, sec += 40) {
         if (memcmp(sec, ".cbp\0", 5) == 0)
-            return RON_EXE_CBP;
+            return RON_EXE_PATCHED;
     }
     return RON_EXE_STOCK;
 }

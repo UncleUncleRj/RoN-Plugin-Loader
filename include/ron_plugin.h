@@ -1,4 +1,23 @@
 /*
+ * SPDX-License-Identifier: MIT
+ * Copyright (c) 2026 Rj Simas
+ *
+ * Permission is hereby granted, free of charge, to any person obtaining a copy of this software and
+ * associated documentation files (the "Software"), to deal in the Software without restriction,
+ * including without limitation the rights to use, copy, modify, merge, publish, distribute,
+ * sublicense, and/or sell copies of the Software, and to permit persons to whom the Software is
+ * furnished to do so, subject to the following conditions:
+ *
+ * The above copyright notice and this permission notice shall be included in all copies or
+ * substantial portions of the Software.
+ *
+ * THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR IMPLIED, INCLUDING BUT
+ * NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND
+ * NONINFRINGEMENT. IN NO EVENT SHALL THE AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES
+ * OR OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN
+ * CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
+ */
+/*
  * RoN Plugin Loader: the plugin API, version 1.
  *
  * A plugin is <game>\plugins\<Name>.dll with <game>\plugins\<Name>.ini beside it. It exports one
@@ -42,7 +61,7 @@ extern "C" {
 typedef struct RonPlugin RonPlugin;   /* opaque, one per plugin */
 
 typedef enum { RON_OK = 0, RON_E_ARG, RON_E_SIG, RON_E_CONFLICT, RON_E_STATE, RON_E_MEM } RonResult;
-typedef enum { RON_EXE_UNKNOWN = 0, RON_EXE_STOCK, RON_EXE_CBP } RonExeKind;
+typedef enum { RON_EXE_UNKNOWN = 0, RON_EXE_STOCK, RON_EXE_PATCHED } RonExeKind;
 /* RON_EV_RENDER_FRAME fires for every drawn picture of a match (from its loading screen on), not in
    the menus.
    RON_EV_LIBRARY (minor 1) fires once for each library the game loads after plugins: the renderer
@@ -54,7 +73,7 @@ typedef enum { RON_EV_PRE_INIT, RON_EV_POST_INIT, RON_EV_MATCH_BUILT, RON_EV_SIM
                RON_EV_RENDER_FRAME, RON_EV_MATCH_END, RON_EV_SHUTDOWN, RON_EV_LIBRARY, RON_EV_COUNT } RonEvent;
 
 typedef struct RonGameInfo {
-    RonExeKind exe;          /* stock riseofnations.exe or CBP's riseofnations_CBP.exe */
+    RonExeKind exe;          /* stock riseofnations.exe, or a patched copy of the same build with an extra code section */
     uint32_t timestamp;      /* the exe's PE TimeDateStamp, 0x6674863F */
     uintptr_t delta;         /* runtime image base - 0x400000 (ASLR) */
     const wchar_t *game_dir; /* the game folder, no trailing backslash */
