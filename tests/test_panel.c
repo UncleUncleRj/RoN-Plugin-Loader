@@ -98,6 +98,15 @@ TEST(panel_description_lines)
     CHECK_STR(l[4].text, "File: A.dll");
     CHECK_EQ(l[4].tone, PANEL_TONE_DIM);
     CHECK_STR(l[5].text, "Hooks 2 game functions.");
+    /* with the file service: how many files it serves joins the line */
+    int files[ORDER_MAX] = {412, 1};
+    panel_set_files(p, files);
+    panel_description(p, l, PANEL_WRAP);
+    CHECK_STR(l[5].text, "Hooks 2 game functions, serves 412 files.");
+    files[0] = 1;
+    panel_set_files(p, files);
+    panel_description(p, l, PANEL_WRAP);
+    CHECK_STR(l[5].text, "Hooks 2 game functions, serves 1 file.");
 }
 
 TEST(panel_description_wraps_utf8)

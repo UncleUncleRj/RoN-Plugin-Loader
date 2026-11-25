@@ -6,6 +6,7 @@
 #include "loader/hooks.h"
 #include "loader/events.h"
 #include "loader/log.h"
+#include "loader/files.h"
 
 int hk_add1(int x);
 
@@ -242,4 +243,27 @@ TEST(run_marker_after_loading)
     char text[64] = "";
     read_file(dir, L"plugins\\.start-marker", text, sizeof text);
     CHECK_STR(text, "loaded\r\n");
+}
+
+TEST(run_serves_the_plugins_folder)
+{
+    wchar_t dir[MAX_PATH], p[MAX_PATH];
+    make_game(dir);
+    swprintf(p, MAX_PATH, L"%ls\\plugins\\GoodFiles\\Data", dir);
+    CreateDirectoryW(p, NULL);
+    wcscat(p, L"\\g.xml");
+    FILE *f = _wfopen(p, L"wb");
+    if (f) {
+        fputs("<g/>", f);
+        fclose(f);
+    }
+    CHECK_EQ(run(dir, RON_EXE_STOCK), 1);
+    const wchar_t *s = fs_resolve(L"data\\G.xml", NULL);
+    CHECK(s && _wcsicmp(s, p) == 0);
+    static char log[16384];
+    read_file(dir, L"plugins\\loader.log", log, sizeof log);
+    CHECK(strstr(log, "Good serves 1 files from its folder") != NULL);
+    /* registrations close with pre_init */
+    CHECK_EQ(fs_use(1, L"data\\h.xml", p), RON_E_STATE);
+    fs_reset();
 }

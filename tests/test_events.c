@@ -69,17 +69,20 @@ TEST(game_hook_table_shape)
 {
     int n = 0;
     const GameHook *h = ev_game_hooks(&n);
-    CHECK_EQ(n, 6);
+    CHECK_EQ(n, 8);
     /* sim_frame hooks the only call of Game::do_frame (Game::loop+0x14E), not the function's first
        bytes, so a tool that hooks do_frame's entry (rondbg's Frida agent does) doesn't silence it */
-    const struct { RonEvent ev; uint32_t va; uint32_t len; int mask_from, mask_to; int call_site; } want[6] = {
+    const struct { RonEvent ev; uint32_t va; uint32_t len; int mask_from, mask_to; int call_site; } want[8] = {
         {RON_EV_POST_INIT, 0x595BE0, 5, -1, -1, 0},    {RON_EV_MATCH_BUILT, 0x5AC190, 6, -1, -1, 0},
         {RON_EV_SIM_FRAME, 0x5916BE, 1, -1, -1, 1},    {RON_EV_RENDER_FRAME, 0x5917E0, 10, 5, 8, 0},
         /* shutdown: the call of Main::run_game_loop in Main::main returns on quit; Main::shutdown is
            never reached there (the process ends in SteamAuthentication first; traced) */
         {RON_EV_MATCH_END, 0x594B80, 6, -1, -1, 0},    {RON_EV_SHUTDOWN, 0x561603, 1, -1, -1, 1},
+        /* the libraries the game loads after plugins: the calls of GraphSys::init_system and
+           SoundSys::init_system */
+        {RON_EV_LIBRARY, 0x539665, 1, -1, -1, 1},     {RON_EV_LIBRARY, 0x598627, 1, -1, -1, 1},
     };
-    for (int i = 0; i < n && i < 6; i++) {
+    for (int i = 0; i < n && i < 8; i++) {
         CHECK_EQ(h[i].ev, want[i].ev);
         CHECK_EQ(h[i].va, want[i].va);
         CHECK_EQ(h[i].sig_len, want[i].len);

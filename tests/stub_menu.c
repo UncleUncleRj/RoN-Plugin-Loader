@@ -7,3 +7,11 @@ int menu_install(uintptr_t delta, int *frame_hook)
     *frame_hook = 0;
     return 0;
 }
+
+#include "loader/files_game.h"
+
+int fs_game_install(uintptr_t delta)
+{
+    (void)delta;
+    return 0;
+}

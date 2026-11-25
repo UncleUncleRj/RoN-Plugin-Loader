@@ -20,6 +20,7 @@ typedef struct LoaderPlugin {
 typedef struct LoaderConfig {
     RonGameInfo game;
     int install_game_hooks;
+    int install_file_hooks;   /* tests: the KernelBase file hooks without the game's */
 } LoaderConfig;
 
 int loader_run(const LoaderConfig *cfg);   /* returns the number of plugins loaded */
@@ -40,6 +41,7 @@ const RonApi *api_table(void);
 const RonGameInfo *loader_game(void);
 const char *loader_owner_name(int owner);       /* "loader" for owner 0 */
 const wchar_t *loader_owner_folder(int owner);  /* <game>\plugins\<Folder> or NULL */
+const wchar_t *loader_owner_id(int owner);      /* the plugin's DLL name without .dll; "loader" for 0 */
 void api_notify(int owner, int other, uintptr_t at, int kind);
 
 #endif

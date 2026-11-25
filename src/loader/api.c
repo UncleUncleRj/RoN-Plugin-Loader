@@ -6,6 +6,8 @@
 #include "loader/hooks.h"
 #include "loader/events.h"
 #include "loader/symbols.h"
+#include "loader/files.h"
+#include <windows.h>
 
 static int owner_of(RonPlugin *self) { return self ? self->owner : -1; }
 
@@ -68,9 +70,76 @@ static RonResult api_on_event(RonPlugin *self, RonEvent ev, RonEventFn fn, void 
 
 static const wchar_t *api_folder(RonPlugin *self) { return loader_owner_folder(owner_of(self)); }
 
+/* ---- files (minor 1) ---- */
+
+static int wide(const char *utf8, wchar_t *out, int cap)
+{
+    return utf8 && MultiByteToWideChar(CP_UTF8, MB_ERR_INVALID_CHARS, utf8, -1, out, cap) > 0;
+}
+
+/* A path given by a plugin: absolute, or inside its Folder. */
+static int plugin_path(RonPlugin *self, const wchar_t *path, wchar_t *out, int cap)
+{
+    if (!path || !*path)
+        return 0;
+    if (path[0] == L'\\' || (path[0] && path[1] == L':')) {
+        _snwprintf(out, (size_t)cap, L"%ls", path);
+    } else {
+        const wchar_t *folder = loader_owner_folder(owner_of(self));
+        if (!folder)
+            return 0;
+        _snwprintf(out, (size_t)cap, L"%ls\\%ls", folder, path);
+    }
+    out[cap - 1] = 0;
+    return 1;
+}
+
+static RonResult api_file_use(RonPlugin *self, const char *game_rel, const wchar_t *path)
+{
+    wchar_t rel[FS_MAX_REL], full[MAX_PATH];
+    if (owner_of(self) < 1 || !wide(game_rel, rel, FS_MAX_REL) || !plugin_path(self, path, full, MAX_PATH))
+        return RON_E_ARG;
+    return fs_use(owner_of(self), rel, full);
+}
+
+static RonResult api_file_folder(RonPlugin *self, const wchar_t *folder)
+{
+    wchar_t full[MAX_PATH];
+    int n = 0;
+    if (owner_of(self) < 1 || !plugin_path(self, folder, full, MAX_PATH))
+        return RON_E_ARG;
+    RonResult r = fs_folder(owner_of(self), full, &n);
+    if (r == RON_OK)
+        log_line(loader_owner_name(owner_of(self)), "serves %d files from %ls", n, full);
+    return r;
+}
+
+static RonResult api_file_generate(RonPlugin *self, const char *game_rel, RonFileGenFn fn, void *user)
+{
+    wchar_t rel[FS_MAX_REL];
+    if (owner_of(self) < 1 || !wide(game_rel, rel, FS_MAX_REL))
+        return RON_E_ARG;
+    return fs_generate(owner_of(self), loader_owner_id(owner_of(self)), rel, fn, user);
+}
+
+static int api_file_path(const char *game_rel, wchar_t *out, uint32_t cap)
+{
+    wchar_t name[FS_MAX_REL], rel[FS_MAX_REL];
+    if (!out || cap == 0 || !wide(game_rel, name, FS_MAX_REL) || !fs_norm(name, rel, FS_MAX_REL))
+        return 0;
+    const wchar_t *p = fs_resolve(rel, NULL);
+    int n = p ? _snwprintf(out, cap, L"%ls", p) : _snwprintf(out, cap, L"%ls\\%ls", loader_game()->game_dir, rel);
+    if (n < 0 || (uint32_t)n >= cap) {
+        out[0] = 0;
+        return 0;
+    }
+    return 1;
+}
+
 static const RonApi k_api = {
-    RON_API_MAJOR, RON_API_MINOR, api_log,        api_game,        api_va,       api_sym,
-    api_hook_inline, api_hook_call, api_hook_ptr, api_patch_bytes, api_on_event, api_folder,
+    RON_API_MAJOR,   RON_API_MINOR,   api_log,         api_game,          api_va,       api_sym,
+    api_hook_inline, api_hook_call,   api_hook_ptr,    api_patch_bytes,   api_on_event, api_folder,
+    api_file_use,    api_file_folder, api_file_generate, api_file_path,
 };
 
 const RonApi *api_table(void) { return &k_api; }
