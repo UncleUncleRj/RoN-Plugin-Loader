@@ -374,3 +374,18 @@ void hm_reset(void)
         hm_rollback_owner(o);
     g_locked = 0;
 }
+
+int hm_owner_count(int owner)
+{
+    int n = 0;
+    for (int i = 0; i < MAX_RECORDS; i++) {
+        const Record *r = &g_rec[i];
+        if (!r->used)
+            continue;
+        int mine = r->kind == K_PATCH && r->creator == owner;
+        for (int k = 0; k < r->nlinks && !mine; k++)
+            mine = r->links[k].owner == owner;
+        n += mine;
+    }
+    return n;
+}

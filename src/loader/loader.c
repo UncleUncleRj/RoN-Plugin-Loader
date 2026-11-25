@@ -7,7 +7,20 @@
 #include "loader/hooks.h"
 #include "loader/events.h"
 #include "loader/symbols.h"
+#include "loader/safestart.h"
+#include "loader/menu.h"
 #include "common/identity.h"
+
+static int g_safe;  /* this start loads no plugins: the last one never reached the menu */
+
+/* post_init: the main menu is up, so this start did not stop early. */
+static void __cdecl on_menu_up(RonEvent ev, void *game_object, void *user)
+{
+    (void)ev;
+    (void)game_object;
+    (void)user;
+    ss_menu_reached();
+}
 
 static LoaderPlugin g_plugins[ORDER_MAX];
 static RonPlugin g_handles[ORDER_MAX];
@@ -213,6 +226,7 @@ static int load_plugin(int i)
 int loader_run(const LoaderConfig *cfg)
 {
     g_count = 0;
+    g_safe = 0;
     g_game = cfg->game;
     wcsncpy(g_game_dir, cfg->game.game_dir ? cfg->game.game_dir : L".", MAX_PATH - 1);
     g_game.game_dir = g_game_dir;
@@ -240,6 +254,23 @@ int loader_run(const LoaderConfig *cfg)
         prepare(i, &items[i]);
     g_count = n;
 
+    /* Safe start: the marker of a start that never reached the menu means no plugins this time. */
+    wchar_t culprit[64];
+    g_safe = ss_begin(g_plugins_dir, culprit, 64);
+    if (g_safe) {
+        int who = -1;
+        for (int i = 0; i < n && culprit[0]; i++)
+            if (g_plugins[i].enabled && _wcsicmp(g_plugins[i].id, culprit) == 0)
+                who = i;
+        if (who >= 0) {
+            log_line("loader", "the last start did not reach the menu: no plugins this start (it stopped while loading %s)",
+                     g_plugins[who].m.name);
+            fail(&g_plugins[who], "the game stopped while it loaded");
+        } else {
+            log_line("loader", "the last start did not reach the menu: no plugins this start");
+        }
+    }
+
     _snwprintf(path, MAX_PATH, L"%ls\\sbl\\rise_z.map", g_game_dir);
     LARGE_INTEGER f, t0, t1;
     QueryPerformanceFrequency(&f);
@@ -256,11 +287,21 @@ int loader_run(const LoaderConfig *cfg)
         log_line("loader", "event hooks: %d of 6 installed", ev_install_game_hooks(g_game.delta));
 
     hm_set_notify(api_notify);
+    ev_register(0, RON_EV_POST_INIT, on_menu_up, NULL);
     int loaded = 0;
-    for (int i = 0; i < n; i++) {
-        if (g_plugins[i].enabled && !g_plugins[i].reason[0] && g_plugins[i].state != LP_DISABLED)
-            loaded += load_plugin(i);
+    if (!g_safe) {
+        for (int i = 0; i < n; i++) {
+            if (g_plugins[i].enabled && !g_plugins[i].reason[0] && g_plugins[i].state != LP_DISABLED) {
+                ss_loading(g_plugins[i].id);
+                loaded += load_plugin(i);
+            }
+        }
+        ss_loaded();
     }
+    /* The loader's menu hooks come after every plugin's, so they head their chains and no plugin can
+       take the Plugins panel away (design section 8). */
+    if (cfg->install_game_hooks)
+        log_line("loader", "menu hooks: %d of 6 installed", menu_install(g_game.delta));
     /* Hooks only inside RonPluginMain: a hook made from pre_init would land on top of every chain and
        run before lower plugins' hooks. Event registration stays open through pre_init. */
     hm_lock();
@@ -286,3 +327,5 @@ void loader_start(void)
     cfg.install_game_hooks = 1;
     loader_run(&cfg);
 }
+
+int loader_safe_start(void) { return g_safe; }

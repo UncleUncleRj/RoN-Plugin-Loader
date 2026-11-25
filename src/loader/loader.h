@@ -24,6 +24,7 @@ typedef struct LoaderConfig {
 
 int loader_run(const LoaderConfig *cfg);   /* returns the number of plugins loaded */
 const LoaderPlugin *loader_plugins(int *count);
+int loader_safe_start(void);  /* 1 when this start loads no plugins because the last one stopped early */
 
 /* Runs the loader for the real game. Called once, from the hook at Main::main (bootstrap/shfolder.c),
    on the game's main thread, outside the loader lock. Not exported: shfolder.dll exports only its two
