@@ -1,8 +1,11 @@
 # Builds the RoN Plugin Loader with zig cc (python -m pip install ziglang).
 #   powershell -File build.ps1          build shfolder.dll (the loader, one file) and the example plugin into build\
 #   powershell -File build.ps1 -Test    also build build\tests.exe (+ build\testgame\) and run the tests
+#   powershell -File build.ps1 -Package also write the release, build\RoN-Plugin-Loader-<version>.zip
+#                                        (shfolder.dll only; the version from src\common\version.h)
 param(
     [switch]$Test,
+    [switch]$Package,
     [string]$GameDir = 'C:\Program Files (x86)\Steam\steamapps\common\Rise of Nations'
 )
 $ErrorActionPreference = 'Stop'
@@ -83,5 +86,19 @@ if ($Test) {
     $exe = Join-Path $build 'tests.exe'
     Invoke-CC 'tests.exe' (@('-o', $exe) + $src + @('-lkernel32', '-luser32', '-lbcrypt', '-lversion'))
     & $exe
-    exit $LASTEXITCODE
+    if ($LASTEXITCODE) { exit $LASTEXITCODE }
 }
+
+if ($Package) {
+    # The release: one zip holding shfolder.dll and nothing else (no example or test plugins)
+    $h = Get-Content -Raw (Join-Path $root 'src\common\version.h')
+    $v = foreach ($part in 'MAJOR', 'MINOR', 'PATCH') {
+        if ($h -notmatch "#define LOADER_VERSION_$part (\d+)") { throw "version.h: no LOADER_VERSION_$part" }
+        $Matches[1]
+    }
+    $zip = Join-Path $build "RoN-Plugin-Loader-$($v -join '.').zip"
+    if (Test-Path $zip) { Remove-Item -Force $zip }
+    Compress-Archive -Path (Join-Path $build 'shfolder.dll') -DestinationPath $zip
+    Write-Output "packaged $zip"
+}
+exit 0

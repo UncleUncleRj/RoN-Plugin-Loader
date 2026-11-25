@@ -1,9 +1,10 @@
 // The mark an installer reads to tell this shfolder.dll from another mod's (design section 11):
-// ProductName "RoN Plugin Loader" and its version. Keep FILEVERSION and the strings in step with
-// RON_API_MAJOR / RON_API_MINOR (include/ron_plugin.h): major.minor of the API, then the build.
+// ProductName "RoN Plugin Loader" and its version, taken from src/common/version.h.
+#include "../common/version.h"
+
 1 VERSIONINFO
-FILEVERSION 1,1,0,0
-PRODUCTVERSION 1,1,0,0
+FILEVERSION LOADER_VERSION_MAJOR,LOADER_VERSION_MINOR,LOADER_VERSION_PATCH,0
+PRODUCTVERSION LOADER_VERSION_MAJOR,LOADER_VERSION_MINOR,LOADER_VERSION_PATCH,0
 FILEOS 0x40004
 FILETYPE 0x2
 BEGIN
@@ -13,11 +14,11 @@ BEGIN
         BEGIN
             VALUE "CompanyName", "RoN Plugin Loader"
             VALUE "FileDescription", "RoN Plugin Loader (in place of shfolder.dll)"
-            VALUE "FileVersion", "1.1.0"
+            VALUE "FileVersion", LOADER_VERSION_STRING
             VALUE "InternalName", "RonPluginLoader"
             VALUE "OriginalFilename", "shfolder.dll"
             VALUE "ProductName", "RoN Plugin Loader"
-            VALUE "ProductVersion", "1.1.0"
+            VALUE "ProductVersion", LOADER_VERSION_STRING
         END
     END
     BLOCK "VarFileInfo"

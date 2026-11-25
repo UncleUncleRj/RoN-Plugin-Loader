@@ -13,6 +13,7 @@
 #include "loader/files_win32.h"
 #include "loader/files_game.h"
 #include "common/identity.h"
+#include "common/version.h"
 
 static int g_safe;  /* this start loads no plugins: the last one never reached the menu */
 static SsClear g_clear = SS_CLEAR_AT_POST_INIT;  /* when the marker goes (final review: not before the
@@ -275,6 +276,7 @@ int loader_run(const LoaderConfig *cfg)
     _snwprintf(path, MAX_PATH, L"%ls\\loader.log", g_plugins_dir);
     log_open(path);
     const char *kind = g_game.exe == RON_EXE_STOCK ? "stock" : g_game.exe == RON_EXE_PATCHED ? "patched" : "unknown";
+    log_line("loader", "RoN Plugin Loader %s", LOADER_VERSION_STRING);
     log_line("loader", "game %s %08x", kind, (unsigned)g_game.timestamp);
     if (g_game.exe == RON_EXE_UNKNOWN) {
         log_line("loader", "unknown game build, no plugins loaded");
