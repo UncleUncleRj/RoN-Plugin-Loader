@@ -424,7 +424,9 @@ First version
 2. API v1: log, game identity, symbol lookup, events, hooks with chaining.
 3. File service: use, folder, generate; the `CreateFileW`/`FindFirstFileExW` fallback where needed.
 4. Plugins panel under Tools & Extras (on/off, order, details, "new"/"failed" tags, apply and
-   restart, safe start).
+   restart, safe start). Built and checked in the game 2026-11-25, with the load-order test
+   plugins SplashTest1 and SplashTest2 (each replaces the first intro video; the lower one wins).
+   Items 1, 2 and 6 were built 2026-11-24.
 5. The multiplayer check of every player before the match (section 10).
 6. A hello-world plugin, tested unattended with the game's `autostart.ini` and the workspace's
    debug tool.
@@ -449,6 +451,10 @@ Later
   the save format unchanged) and warn when loaded with a different list (my call to leave this out
   of the first version; until then a replay played without its plugins diverges silently).
 - The in-game debug overlay discussed earlier becomes a plugin.
+- An event when the renderer (`d3dgl.dll`) or the sound library loads, with hooks allowed in it in
+  load order, so plugins can hook their code through the API. They load inside `System::init`,
+  after plugins; the SplashTest plugins work around it by hooking `Video::init` in the executable
+  and giving the new video player a copy of its virtual table.
 
 ## 12. Constraints
 
@@ -489,3 +495,9 @@ Later
   closing the window; only the console `quit` was traced.
 - Whether loading a save or a replay goes through `Setup::build_game` (callers: `Game::init+0xD33`,
   `ConsoleWin::run_cmd`), so that `match_built` and `match_end` fire for those matches too.
+- After Apply and Restart the game is no longer started by Steam: whether the Steam overlay and
+  sign-in still work then (the same holds for the Workshop window's Reload Assets). The panel's
+  look, order, on/off, Apply and Restart and the test plugins were checked in the game
+  (2026-11-25); this was not.
+- A start closed during loading counts as a stop, so one plugin-free start follows (accepted in
+  section 8); not yet seen in the game.
