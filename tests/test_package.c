@@ -9,6 +9,7 @@
 #include <string.h>
 #include "check.h"
 #include "ron_plugin.h"
+#include "common/version.h"
 
 static void build_path(wchar_t *out, const wchar_t *name)
 {
@@ -132,8 +133,8 @@ TEST(pkg_exports_two_forwarders)
     free(f);
 }
 
-/* The mark an installer reads (design section 11): the version resource names the loader, and its
-   version is the API's major.minor. */
+/* The mark an installer reads (design section 11): the version resource names the loader and
+   carries src/common/version.h's version, whose major.minor is the API's. */
 TEST(pkg_version_resource)
 {
     wchar_t path[MAX_PATH];
@@ -148,9 +149,25 @@ TEST(pkg_version_resource)
     UINT len = 0;
     CHECK(VerQueryValueW(buf, L"\\StringFileInfo\\040904B0\\ProductName", (void **)&name, &len));
     CHECK(name && wcscmp(name, L"RoN Plugin Loader") == 0);
+    CHECK_EQ(LOADER_VERSION_MAJOR, RON_API_MAJOR);
+    CHECK_EQ(LOADER_VERSION_MINOR, RON_API_MINOR);
     VS_FIXEDFILEINFO *fi = NULL;
     CHECK(VerQueryValueW(buf, L"\\", (void **)&fi, &len) && fi);
-    if (fi)
-        CHECK_EQ(fi->dwFileVersionMS, ((DWORD)RON_API_MAJOR << 16) | RON_API_MINOR);
+    if (fi) {
+        CHECK_EQ(fi->dwFileVersionMS, ((DWORD)LOADER_VERSION_MAJOR << 16) | LOADER_VERSION_MINOR);
+        CHECK_EQ(fi->dwFileVersionLS, (DWORD)LOADER_VERSION_PATCH << 16);
+        CHECK_EQ(fi->dwProductVersionMS, fi->dwFileVersionMS);
+        CHECK_EQ(fi->dwProductVersionLS, fi->dwFileVersionLS);
+    }
+    static const wchar_t *keys[] = {L"\\StringFileInfo\\040904B0\\FileVersion",
+                                    L"\\StringFileInfo\\040904B0\\ProductVersion"};
+    for (int i = 0; i < 2; i++) {
+        wchar_t *v = NULL;
+        CHECK(VerQueryValueW(buf, keys[i], (void **)&v, &len));
+        char got[32] = "";
+        if (v)
+            WideCharToMultiByte(CP_UTF8, 0, v, -1, got, sizeof got, NULL, NULL);
+        CHECK_STR(got, LOADER_VERSION_STRING);
+    }
     free(buf);
 }

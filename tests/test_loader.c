@@ -7,6 +7,7 @@
 #include "loader/events.h"
 #include "loader/log.h"
 #include "loader/files.h"
+#include "common/version.h"
 
 int hk_add1(int x);
 
@@ -116,6 +117,7 @@ TEST(run_loads_good_only)
     CHECK_EQ(n, 6);
     static char log[16384];
     read_file(dir, L"plugins\\loader.log", log, sizeof log);
+    CHECK(strstr(log, "[loader] RoN Plugin Loader " LOADER_VERSION_STRING "\r\n") != NULL);
     CHECK(strstr(log, "NoIni.dll has no NoIni.ini") != NULL);
     CHECK(strstr(log, "[Good] pre_init") != NULL);
     CHECK(strstr(log, "plugin Good 1.0 loaded") != NULL);

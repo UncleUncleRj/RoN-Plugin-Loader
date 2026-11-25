@@ -458,7 +458,9 @@ repository: hooks onto the shared hook manager, `override.c` replaced by the fil
 `winmm.dll` proxy retired). RON Revived's install script installs the loader (`shfolder.dll`) when
 it doesn't find it, or finds an older version (my call: "older" too), and tells players to
 uninstall old RON Revived versions. A file name can't tell ours from another mod's `shfolder.dll`,
-so the script needs a mark inside the file, such as a version resource (still to add).
+so the script needs a mark inside the file: the version resource (built: ProductName "RoN Plugin
+Loader" and the version from `src/common/version.h`; see `docs/developers.md`, "Version and
+releases").
 
 Later
 - Declared rules (`Requires`, `LoadAfter`, `Incompatible`), warnings on the panel and a "sort
