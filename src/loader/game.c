@@ -1,3 +1,4 @@
+#include <windows.h>
 #include <stdio.h>
 #include <string.h>
 #include "loader/game.h"
@@ -107,3 +108,106 @@ int game_data_path(const wchar_t *name, wchar_t *out, int cap)
 /* SoundGlobal::play(SoundGlobalCat): the category by value, ret 4, ECX ignored; 0xAF = the menu
    buttons' click (ledger draw F12). */
 void game_click(void) { ((void(__stdcall *)(int))VA(0x97F770))(0xAF); }
+
+/* ---- drawing (ledger draw; the same calls as RON Revived's assist_panel.c, tested in the game) ---- */
+
+#define IFACE_RM     0xEBD1C0  /* IFaceRenderManager */
+#define FONTS        0xED8160  /* FontFamily */
+#define GRAPHSYS     0xE335A0  /* GraphSys *: +0x164 the depth of what is added */
+#define GS_DEPTH     0x164
+#define WIN_BUFFER   0x154     /* the window's Buffer */
+#define BUF_FONT     0x7C      /* Font *, then two more words */
+#define BUF_COLORS   0x90      /* what set_text_color changes */
+#define BUF_COLORS_N 0x80
+#define RENDER_SOLID 5
+
+static const uintptr_t k_colors[] = {0xC8D26C, 0xC8D218, 0xC8D248, 0xC8D278, 0xC8D260};  /* WHITE GREY RED YELLOW BLACK */
+
+static const void *color_of(int c) { return (const void *)VA(k_colors[c >= 0 && c <= GC_BLACK ? c : 0]); }
+static unsigned rgba_of(int c) { return *(const unsigned *)color_of(c); }
+
+typedef void *(THISCALL *FindFn)(void *win, const void *name, int id, int *out);  /* ret 0xC */
+
+static void *find(void *win, const char *name, int slot)
+{
+    if (!win)
+        return NULL;
+    GString s;
+    gs_from_ascii(&s, name);
+    void *r = ((FindFn)(*(void ***)win)[slot / 4])(win, &s, -1, NULL);
+    gs_close(&s);
+    return r;
+}
+
+const short *game_find_rect(void *win, const char *name) { return find(win, name, 0x488); }
+void *game_find_tex(void *win, const char *name) { return find(win, name, 0xA4); }
+
+typedef void(THISCALL *AddXYFn)(void *rm, const void *tex, int x, int y, unsigned color, int type);       /* ret 0x14 */
+typedef void(THISCALL *AddRectFn)(void *rm, const void *tex, const short *r, unsigned color, int type);   /* ret 0x10 */
+
+void game_tex(void *tex, int x, int y, int color)
+{
+    if (tex)
+        ((AddXYFn)VA(0x51F440))((void *)VA(IFACE_RM), tex, x, y, rgba_of(color), 1);
+}
+
+void game_fill(const short r[4], int color)
+{
+    ((AddRectFn)VA(0x51F3D0))((void *)VA(IFACE_RM), NULL, r, rgba_of(color), RENDER_SOLID);
+}
+
+static int g_saved_depth;
+
+void game_text_begin(void)
+{
+    int *depth = (int *)(*(char **)VA(GRAPHSYS) + GS_DEPTH);
+    g_saved_depth = *depth;
+    *depth = g_saved_depth + 1;
+}
+
+void game_text_end(void) { *(int *)(*(char **)VA(GRAPHSYS) + GS_DEPTH) = g_saved_depth; }
+
+typedef void *(THISCALL *FontGetFn)(void *family, int size, int style);                   /* ret 8 */
+typedef void(THISCALL *TextColorFn)(void *buf, const void *c1, const void *c2, int a, int b);  /* ret 0x10 */
+typedef int(THISCALL *WriteFn)(void *buf, const void *str, const short *r, int len);       /* ret 0xC */
+
+int game_text(void *win, const char *utf8, const short r[4], int right, int color, int size)
+{
+    static wchar_t wide[512];  /* the wide constructor keeps this pointer while the String lives */
+    char *buf = (char *)win + WIN_BUFFER;
+    if (!utf8 || !*utf8)
+        return r[0];
+    void *font = ((FontGetFn)VA(0x522810))((void *)VA(FONTS), size, -1);
+    if (!font && !*(void **)(buf + BUF_FONT))
+        return r[0];
+    unsigned char saved[12], saved_colors[BUF_COLORS_N];
+    memcpy(saved, buf + BUF_FONT, 12);
+    memcpy(saved_colors, buf + BUF_COLORS, BUF_COLORS_N);
+    if (font) {
+        *(void **)(buf + BUF_FONT) = font;
+        *(int *)(buf + BUF_FONT + 4) = 0;
+        *(int *)(buf + BUF_FONT + 8) = 0;
+    }
+    ((TextColorFn)VA(0x50DAF0))(buf, color_of(color), color_of(GC_BLACK), -1, 0);
+    GString s;
+    const unsigned char *p = (const unsigned char *)utf8;
+    while (*p && *p < 0x80)
+        p++;
+    if (!*p) {
+        gs_from_ascii(&s, utf8);
+    } else {
+        if (MultiByteToWideChar(CP_UTF8, 0, utf8, -1, wide, 512) <= 0)
+            wide[0] = 0;
+        gs_from_static(&s, wide);
+    }
+    int len = *(unsigned short *)((char *)&s + 8), x = r[0];
+    if (len) {
+        int got = ((WriteFn)VA(right ? 0x50FA40 : 0x50F6E0))(buf, &s, r, len);
+        if (right)
+            x = got;
+    }
+    gs_close(&s);
+    memcpy(buf + BUF_FONT, saved, 12);
+    memcpy(buf + BUF_COLORS, saved_colors, BUF_COLORS_N);
+    return x;
+}

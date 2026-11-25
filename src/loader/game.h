@@ -28,4 +28,16 @@ void game_restart(void);                              /* WorkshopWin::reloadAsse
 int game_data_path(const wchar_t *name, wchar_t *out, int cap);  /* "data\<name>" after mods (prepend_content_dir) */
 void game_click(void);                                /* the menu buttons' click sound */
 
+/* Drawing, in a window's own coordinates (ledger draw F1-F9). Rects are short left, right, top, bottom. */
+enum { GC_WHITE, GC_GREY, GC_RED, GC_YELLOW, GC_BLACK };
+const short *game_find_rect(void *win, const char *name);  /* an IFACERECT of the window's XML, or NULL */
+void *game_find_tex(void *win, const char *name);          /* an IFACETEX of the window's XML, or NULL */
+void game_tex(void *tex, int x, int y, int color);         /* IFaceRenderManager::add, at its own size */
+void game_fill(const short r[4], int color);               /* IFaceRenderManager::add, solid */
+void game_text_begin(void);                                /* text in front of the textures: depth + 1 */
+void game_text_end(void);
+/* utf8 in rect r (left or right aligned), size 12-ish, colour GC_*; returns the text's left x when
+   right aligned, else r[0]. */
+int game_text(void *win, const char *utf8, const short r[4], int right, int color, int size);
+
 #endif
