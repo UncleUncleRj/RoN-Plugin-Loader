@@ -2,7 +2,7 @@
 
 A plugin loader for Rise of Nations: Extended Edition (Steam, `riseofnations.exe` build `0x6674863F`).
 
-It loads plugin DLLs from `<game>\plugins\<Name>\<Name>.dll` in an order the player sets on a
+It loads plugin DLLs from `<game>\plugins\<Name>.dll` (each with a `<Name>.ini`) in an order the player sets on a
 Plugins panel in the main menu. Plugins can replace, add or generate game files, hook game
 functions through one shared hook manager, and declare whether they change the simulation, so a
 multiplayer lobby can check that every player runs the same set.

@@ -22,8 +22,8 @@ whom, and loads newly dropped DLLs mid-game on a background thread.
 ## 2. Goals, non-goals, anti-goals
 
 Goals
-- Drop-in plugins: `<game>\plugins\<Name>\<Name>.dll`, each plugin in its own folder with its own
-  files.
+- Drop-in plugins: `<game>\plugins\<Name>.dll` with a same-name `.ini`; a plugin's files ship in
+  a subfolder of `plugins\` that the ini names.
 - A **load order the player sets** on a Plugins panel in the main menu. Plugins load from the top
   of the list to the bottom; when two plugins change the same thing, **the lower one wins**.
 - Plugins can give the game files: ship them, point at a folder, or **generate them at run time**
@@ -87,36 +87,52 @@ into the bootstrap: it must still happen before `PartyInitialize` (`Main::init+0
 
 ## 5. Plugins on disk and the load order
 
+User decision (2026-11-24): the loader looks for DLLs, not folders. A plugin is a DLL in
+`plugins\` with an `.ini` of the same name beside it. The ini names the plugin's subfolder, which
+the modder ships already filled with the plugin's files in the base game's layout.
+
 ```
 <game>\plugins\
     load-order.txt
+    RON Revived.dll
+    RON Revived.ini          (Folder=RON Revived)
     RON Revived\
-        RON Revived.dll
-        plugin.ini
-        data\...  art\...  (anything the plugin uses)
-    Better Minimap\
-        Better Minimap.dll
-        plugin.ini
+        data\...  art\...  sounds\...   modded files, laid out like the base game's
+        settings.json                   anything else the plugin writes for itself
+    Better Minimap.dll
+    Better Minimap.ini       (no Folder: a code-only plugin)
 ```
 
-- A plugin is a folder holding `<folder name>.dll` and `plugin.ini`. Folders without the DLL are
-  ignored (and listed in the log).
-- **`plugin.ini`** (my call; it lets the panel show every plugin, enabled or not, without running
-  a disabled plugin's code): `[Plugin]` with `Name`, `Version`, `Author`, `Description`,
-  `AffectsSim` (0/1). Reserved for the later rules feature: `Requires`, `LoadAfter`,
-  `Incompatible` (comma-separated plugin names). The exact syntax is the builder's call; it must
-  be plain text a modder writes by hand.
-- **`load-order.txt`** (my call): UTF-8 text, one plugin folder name per line, top line loads
-  first; a disabled plugin is kept in the list, marked (for example a leading `-`). The panel
-  writes it; a player may also edit it by hand.
+- A plugin is `plugins\<Name>.dll` with `plugins\<Name>.ini`. `<Name>`, the file name without
+  `.dll`, is the plugin's id in `load-order.txt`. A DLL without a same-name ini is not a plugin
+  and is left alone, so a plugin may keep helper DLLs there; the log lists them. Subfolders are
+  never searched for plugins.
+- **`<Name>.ini`** (it lets the panel show every plugin, enabled or not, without running a
+  disabled plugin's code): `[Plugin]` with `Name` (shown on the panel; defaults to the id),
+  `Version`, `Author`, `Description`, `AffectsSim` (0/1, default 1) and `Folder`. Reserved for the
+  later rules feature: `Requires`, `LoadAfter`, `Incompatible` (comma-separated plugin ids). The
+  exact syntax is the builder's call; it must be plain text a modder writes by hand.
+- **`Folder`** names the plugin's subfolder of `plugins\`. It is optional: a plugin with no files
+  (code only, or one that generates all its data) leaves it out. My calls: it must be a single
+  folder name (no `\`, `/`, `:` or `..`), the folder must exist, and a folder belongs to one
+  plugin only. The first enabled plugin in the load order that names it keeps it, and a later one
+  fails to load, with the reason.
+- **The standard:** the modder ships the modded files already in that subfolder, in the base
+  game's layout, and the loader serves them (section 9) without any code. Plugins may also write
+  files of their own (settings such as `.json` files, caches, anything they need), wherever they
+  need them; there are no hard rails. Inside the plugin's folder such a file is never served by
+  accident, because the game only asks for paths of its own.
+- **`load-order.txt`** (my call): UTF-8 text, one plugin id per line, top line loads first; a
+  disabled plugin is kept in the list, marked (for example a leading `-`). The panel writes it; a
+  player may also edit it by hand.
 - **A newly found plugin** is appended at the bottom, **enabled** (my call, as SC4: putting a
   plugin in the folder means you want it), and shown with a "new" tag until the next restart.
-- A listed plugin whose folder is gone is dropped from the file at the next save and noted in the
+- A listed plugin whose DLL is gone is dropped from the file at the next save and noted in the
   log.
-- The loader only ever loads DLLs from `<game>\plugins\<Name>\`. Never from `mods\` folders or
+- The loader only ever loads plugin DLLs from `<game>\plugins\`. Never from `mods\` folders or
   Workshop items (joining a multiplayer game subscribes the player to the host's Workshop mod by
   itself, `ModSteamWorkshop::SubscribeModNow`), never by download. A plugin may load further DLLs
-  from its own folder with `LoadLibrary` itself.
+  itself, for example from its own folder.
 
 ## 6. Plugin API
 
@@ -223,6 +239,9 @@ same place and frame as the game's Solo, Multiplayer and Options panels (`topmen
 
 A plugin tells the loader about files; it does not move files into the game folder.
 
+- **Its ini's `Folder`** is served without any code, as if the plugin had called
+  `file_folder` on it, at the plugin's place in the load order.
+
 - **Use this file**: `api->file_use("data\\unitrules.xml", "<path>")`.
 - **Look in this folder**: `api->file_folder("<path>")`. Any file in it, at the same relative
   path as the game's own (`art\...`, `data\...`, `sounds\...`), replaces the game's copy.
@@ -241,6 +260,10 @@ Resolution, for one requested name:
 3. Remember the result for the rest of the run.
 
 Rules:
+- Only names inside the game's content folders are served (`art\`, `data\`, `sounds\` and the
+  game's other folders). Top-level names never are: the game also looks up its renderer, sound
+  and network libraries (`d3dgl.dll`, `dssl.dll`, `CrossplayNetLib.dll`) through
+  `prepend_content_dir`, and no plugin folder may replace those (my call).
 - Hook `String::prepend_content_dir`. Workshop items prove the game accepts absolute paths from
   this function for data files.
 - Generated files go to a cache folder outside the game install that needs no admin rights, one
@@ -287,7 +310,7 @@ multiplayer features; agree with them on the channel below so both use one.
   `GameSpy::UpdateLobbyFromDTO` (`0x962C70`). The per-player side (lobby member data, or a message
   over the game's own network) is still to be found: reverse-engineering work that belongs to the
   first version, shared with the multiplayer developer.
-- Each plugin declares `AffectsSim` in `plugin.ini` (and again at load).
+- Each plugin declares `AffectsSim` in its `.ini` (and again at load).
 - The game's own mod checksum does not help: nothing compares the `mod_checksum` lobby key, and
   `GameMod::compute_checksum` adds up only a mod's `.xml` files.
 - Backstop: the game checksums the whole simulation, rules data included, every turn, so a drift
@@ -298,7 +321,7 @@ multiplayer features; agree with them on the channel below so both use one.
 ## 11. First version and later
 
 First version
-1. Bootstrap (`shfolder.dll`) and loader at `Main::main`; `load-order.txt`; `plugin.ini`.
+1. Bootstrap (`shfolder.dll`) and loader at `Main::main`; `load-order.txt`; the plugin `.ini` files.
 2. API v1: log, game identity, symbol lookup, events, hooks with chaining.
 3. File service: use, folder, generate; the `CreateFileW`/`FindFirstFileExW` fallback where needed.
 4. Plugins panel (on/off, order, details, "new"/"failed" tags, apply and restart).
@@ -343,7 +366,7 @@ Later
 
 ## 13. Left to the builder
 
-- File and export names, the `plugin.ini` and `load-order.txt` syntax, the cache folder location.
+- File and export names, the plugin `.ini` and `load-order.txt` syntax, the cache folder location.
 - How the panel window is built (topmenu panel element or a window built in code).
 - How the restart relaunches the game, after testing.
 - Log location and format.

@@ -2,9 +2,9 @@
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
-**Goal:** Build the bootstrap `shfolder.dll`, the loader `RonPluginLoader.dll` and the plugin API v1, so plugin DLLs in `<game>\plugins\<Name>\` load in the saved order, share hooks with lowest-first chaining, and receive the seven loader events in a real game run.
+**Goal:** Build the bootstrap `shfolder.dll`, the loader `RonPluginLoader.dll` and the plugin API v1, so plugin DLLs in `<game>\plugins\` (each with a same-name `.ini`) load in the saved order, share hooks with lowest-first chaining, and receive the seven loader events in a real game run.
 
-**Architecture:** `shfolder.dll` forwards its two exports to `shell32`. From `DllMain` it only checks the exe, warms up bcrypt and patches a `jmp` at `Main::main`. That `jmp` loads `RonPluginLoader.dll` on the game's main thread, outside the loader lock. The loader reads `plugins\load-order.txt` and each `plugin.ini`, installs its own event hooks, loads the plugins top to bottom and hands each the `RonApi` table. Logic that needs no game (identity, ini, load order, map, hook manager, events, loading sequence) is unit-tested in a 32-bit test exe. The whole chain is then proven in one unattended game run.
+**Architecture:** `shfolder.dll` forwards its two exports to `shell32`. From `DllMain` it only checks the exe, warms up bcrypt and patches a `jmp` at `Main::main`. That `jmp` loads `RonPluginLoader.dll` on the game's main thread, outside the loader lock. The loader reads `plugins\load-order.txt` and each plugin's `.ini`, installs its own event hooks, loads the plugins top to bottom and hands each the `RonApi` table. Logic that needs no game (identity, ini, load order, map, hook manager, events, loading sequence) is unit-tested in a 32-bit test exe. The whole chain is then proven in one unattended game run.
 
 **Tech Stack:** C11, GNU inline asm (Intel syntax), zig cc `-target x86-windows-gnu` through `python -m ziglang`, Win32 wide-character APIs, PowerShell build and dev scripts, `devtools/rondbg` for the game run.
 
@@ -15,7 +15,7 @@
 - 32-bit x86 only. The exe's TimeDateStamp must be `0x6674863F` (stock or CBP); otherwise the loader loads no plugins and says so.
 - ASLR: every address is applied with the load delta (runtime base − `0x400000`).
 - Engine calls only on the main thread. Under the loader lock only: identity check, bcrypt warm-up, the `Main::main` patch. Nothing waits or loads a library in `DllMain`.
-- Plugins load only from `<game>\plugins\<Name>\<Name>.dll`; never from `mods\` or Workshop folders.
+- Plugins load only from `<game>\plugins\<Name>.dll` with a same-name `<Name>.ini`; never from `mods\` or Workshop folders.
 - When two plugins hook the same function, the lowest plugin's hook runs first; events fire in load order (top first).
 - Hooks, byte patches and event registrations are accepted only while plugins load (until `pre_init` has fired); later calls return `RON_E_STATE`. Nothing is ever unhooked except a failed plugin's own links during its load.
 - An old `<game>\winmm.dll` present, or an unknown exe → no plugins loaded, one log line saying why.
@@ -38,7 +38,7 @@
 
 ```
 RoN-Plugin-Loader/
-  build.ps1                      builds build\shfolder.dll, build\RonPluginLoader.dll, build\plugins\HelloPlugin\;
+  build.ps1                      builds build\shfolder.dll, build\RonPluginLoader.dll, build\plugins\HelloPlugin.dll + .ini;
                                  -Test also builds build\tests.exe + build\testgame\ and runs the tests
   include/ron_plugin.h           public plugin API (the only header plugin authors include)
   src/common/identity.c/.h       exe identity from a mapped PE image (shared by bootstrap and loader)
@@ -46,18 +46,18 @@ RoN-Plugin-Loader/
   src/bootstrap/shfolder.c       DllMain, bcrypt warm-up, Main::main patch, loads the loader
   src/bootstrap/shfolder.def     two exports forwarded to shell32
   src/loader/log.c/.h            loader.log writer
-  src/loader/manifest.c/.h       plugin.ini parser
+  src/loader/manifest.c/.h       plugin .ini parser
   src/loader/order.c/.h          plugin discovery, load-order.txt parse / merge / serialise
   src/loader/symbols.c/.h        rise_z.map index and lookup
   src/loader/hooks.c/.h          hook manager: inline, call site, pointer slot, byte patch; chains; rollback
   src/loader/events.c/.h         event registry + the loader's own hooks on game functions
   src/loader/loader.c/.h         loader_run sequence, plugin table, RonLoaderStart export
   src/loader/api.c               the RonApi table bound to plugin handles
-  plugins/HelloPlugin/           HelloPlugin.c, plugin.ini
+  plugins/HelloPlugin/           HelloPlugin.c, HelloPlugin.ini
   tests/check.h                  CHECK / CHECK_EQ macros, test registry
   tests/test_*.c                 one file per module
   tests/targets.c                asm hook targets exported from tests.exe
-  tests/plugins/                 Good.c, Zero.c, BadMajor.c, NoIni.c (+ ini files) for task 8
+  tests/plugins/                 Good.c, Zero.c, BadMajor.c (+ ini files) for task 8
   tests/fixtures/mini.map
   tools/dev-install.ps1, tools/dev-uninstall.ps1
 ```
@@ -94,6 +94,7 @@ typedef struct RonApi {
     RonResult (*hook_ptr)(RonPlugin *self, uintptr_t slot, uintptr_t expected, void *detour, void **orig);
     RonResult (*patch_bytes)(RonPlugin *self, uintptr_t at, const uint8_t *expect, const uint8_t *bytes, uint32_t len);
     RonResult (*on_event)(RonPlugin *self, RonEvent ev, RonEventFn fn, void *user);
+    const wchar_t *(*folder)(RonPlugin *self);          /* <game>\plugins\<Folder>, NULL without one */
 } RonApi;
 typedef struct RonPluginInfo { uint32_t api_major; int affects_sim; } RonPluginInfo;
 /* Each plugin exports: RON_PLUGIN_EXPORT int __cdecl RonPluginMain(const RonApi *, RonPlugin *, RonPluginInfo *);
@@ -125,19 +126,19 @@ typedef struct RonPluginInfo { uint32_t api_major; int affects_sim; } RonPluginI
 - [ ] **Step 4:** Run `build.ps1 -Test`. Expected: all pass.
 - [ ] **Step 5:** CRLF, commit `"Exe identity (stock, CBP, unknown) and loader log"`.
 
-### Task 3: plugin.ini parser
+### Task 3: Plugin .ini parser
 
 **Files:**
 - Create: `src/loader/manifest.c/.h`, `tests/test_manifest.c`
 
 **Interfaces:**
-- Produces: `typedef struct Manifest { char name[64]; char version[32]; char author[64]; char description[256]; int affects_sim; } Manifest;` and `int manifest_parse(const char *utf8, size_t len, Manifest *m)`, which returns 1 when a `[Plugin]` section exists. Section and key names are case-insensitive; values are trimmed; lines starting with `;` or `#` are comments; a BOM is skipped; values longer than a field are truncated at a UTF-8 character boundary; `AffectsSim` is 0 only for the exact value `0`, and the default is 1. A missing `Name` leaves `name` empty (the loader fills in the folder name).
+- Produces: `typedef struct Manifest { char name[64]; char version[32]; char author[64]; char description[256]; char folder[64]; int affects_sim; int folder_bad; } Manifest;` and `int manifest_parse(const char *utf8, size_t len, Manifest *m)`, which returns 1 when a `[Plugin]` section exists. Section and key names are case-insensitive; values are trimmed; lines starting with `;` or `#` are comments; a BOM is skipped; values longer than a field are truncated at a UTF-8 character boundary; `AffectsSim` is 0 only for the exact value `0`, and the default is 1. A missing `Name` leaves `name` empty (the loader fills in the plugin id). `Folder` is kept only when it is a single folder name (no `\`, `/` or `:`, and not `.` or `..`); otherwise `folder` stays empty and `folder_bad` is 1.
 
-- [ ] **Step 1:** Tests: `manifest_full` (all five keys → exact values), `manifest_defaults` (only `[Plugin]` → empty strings, `affects_sim == 1`), `manifest_case_bom_crlf` (`\xEF\xBB\xBF[plugin]\r\nname = X \r\n` → `name == "X"`), `manifest_no_section` (returns 0), `manifest_comments_other_sections` (keys under `[Other]` ignored), `manifest_truncate_utf8` (a 300-byte description of 2-byte characters → ends on a whole character, length ≤ 255).
+- [ ] **Step 1:** Tests: `manifest_full` (all six keys → exact values, `Folder=RON Revived` → `folder == "RON Revived"`), `manifest_defaults` (only `[Plugin]` → empty strings, `affects_sim == 1`), `manifest_case_bom_crlf` (`\xEF\xBB\xBF[plugin]\r\nname = X \r\n` → `name == "X"`), `manifest_no_section` (returns 0), `manifest_comments_other_sections` (keys under `[Other]` ignored), `manifest_truncate_utf8` (a 300-byte description of 2-byte characters → ends on a whole character, length ≤ 255), `manifest_folder_rejects_paths` (`..\x`, `C:\x` and `a/b` → `folder` empty, `folder_bad == 1`).
 - [ ] **Step 2:** Run. Expected: FAIL.
 - [ ] **Step 3:** Implement `manifest_parse`.
 - [ ] **Step 4:** Run. Expected: PASS.
-- [ ] **Step 5:** CRLF, commit `"plugin.ini parser"`.
+- [ ] **Step 5:** CRLF, commit `"Plugin .ini parser"`.
 
 ### Task 4: Plugin discovery and load-order.txt
 
@@ -146,12 +147,12 @@ typedef struct RonPluginInfo { uint32_t api_major; int affects_sim; } RonPluginI
 
 **Interfaces:**
 - Produces: `#define ORDER_MAX 128`, `typedef struct OrderItem { wchar_t name[64]; int enabled; int is_new; } OrderItem;`
-- `int order_discover(const wchar_t *plugins_dir, wchar_t (*names)[64], int max, void (*on_skip)(const wchar_t *folder))`: the subfolders that hold `<folder>\<folder>.dll`, sorted case-insensitively (`CompareStringOrdinal` with ignore-case). A subfolder without that DLL is reported through `on_skip` (may be NULL). Returns the count.
+- `int order_discover(const wchar_t *plugins_dir, wchar_t (*names)[64], int max, void (*on_skip)(const wchar_t *dll))`: the plugin ids, i.e. each `*.dll` directly in `plugins_dir` with a same-name `.ini` beside it, sorted case-insensitively (`CompareStringOrdinal` with ignore-case). A DLL without its ini is reported through `on_skip` (may be NULL). Subfolders are not searched. Returns the count.
 - `int order_parse(const char *utf8, size_t len, OrderItem *out, int max)`: one name per line. A leading `-` means disabled. `#` lines and blank lines are skipped, names are trimmed, a BOM is tolerated, and a later duplicate (case-insensitive) is dropped.
 - `int order_merge(const OrderItem *listed, int n_listed, const wchar_t (*found)[64], int n_found, OrderItem *out, int max, int *dropped)`: listed names that were found keep their order and state; listed names not found are dropped and counted; found names not listed are appended in discovery order with `enabled=1, is_new=1`.
 - `size_t order_serialize(const OrderItem *items, int n, char *buf, size_t cap)`: UTF-8 without BOM, CRLF, `-Name` for a disabled plugin, a first line `# Load order: top loads first; the lowest plugin wins. A leading - turns a plugin off.`
 
-- [ ] **Step 1:** Tests: `discover_sorted_requires_dll` (temp dir with `b\b.dll`, `A\A.dll`, `c\` without a DLL, `d\other.dll` → `A`, `b`; `on_skip` called for `c` and `d`), `discover_non_ascii` (temp folder `тест-ü` holding `Ünï\Ünï.dll` → found), `parse_rules` (BOM, CRLF, `  -Foo  `, `# x`, blank, `foo` duplicate → one item `Foo`, disabled), `merge_new_appended` (listed `B`; found `A`, `B` → `B` (not new), `A` (new, enabled)), `merge_missing_dropped` (listed `X`; found nothing → empty, `dropped == 1`), `serialize_roundtrip` (serialise then parse gives the same names and states).
+- [ ] **Step 1:** Tests: `discover_sorted_requires_ini` (temp dir with `b.dll` + `b.ini`, `A.dll` + `A.ini`, `c.dll` alone, `d.ini` alone, and `e\e.dll` + `e\e.ini` in a subfolder → `A`, `b`; `on_skip` called for `c.dll` only), `discover_non_ascii` (temp folder `тест-ü` holding `Ünï.dll` + `Ünï.ini` → found), `parse_rules` (BOM, CRLF, `  -Foo  `, `# x`, blank, `foo` duplicate → one item `Foo`, disabled), `merge_new_appended` (listed `B`; found `A`, `B` → `B` (not new), `A` (new, enabled)), `merge_missing_dropped` (listed `X`; found nothing → empty, `dropped == 1`), `serialize_roundtrip` (serialise then parse gives the same names and states).
 - [ ] **Step 2:** Run. Expected: FAIL.
 - [ ] **Step 3:** Implement the four functions.
 - [ ] **Step 4:** Run. Expected: PASS.
@@ -249,13 +250,13 @@ typedef struct RonPluginInfo { uint32_t api_major; int affects_sim; } RonPluginI
 ### Task 8: Loading sequence and the API table
 
 **Files:**
-- Create: `src/loader/loader.c/.h`, `src/loader/api.c`, `tests/test_loader.c`, `tests/plugins/Good.c`, `Zero.c`, `BadMajor.c`, `NoIni.c` and their `plugin.ini` files. Modify: `build.ps1` (`-Test` builds `build\testgame\plugins\<Name>\<Name>.dll` for each, copies their ini files except for `NoIni`, and writes 64 random bytes to `build\testgame\plugins\Garbage\Garbage.dll` with a valid ini).
+- Create: `src/loader/loader.c/.h`, `src/loader/api.c`, `tests/test_loader.c`, `tests/plugins/Good.c`, `Zero.c`, `BadMajor.c` and their `.ini` files. Modify: `build.ps1` (`-Test` builds `build\testgame\plugins\<Name>.dll` with its `<Name>.ini` for each; creates the folder `build\testgame\plugins\GoodFiles\`, named by `Good.ini`'s `Folder=GoodFiles`; adds copies of `Good.dll` as `NoIni.dll` (no ini), `MissingFolder.dll` (ini `Folder=Nope`) and `Twin.dll` (ini `Folder=GoodFiles`); and writes 64 random bytes as `Garbage.dll` with a valid ini).
 
 **Interfaces:**
 - Consumes: tasks 2–7.
 - Produces:
   - `typedef enum { LP_DISABLED, LP_LOADED, LP_FAILED } LpState;`
-  - `typedef struct LoaderPlugin { wchar_t folder[64]; Manifest m; int enabled, is_new; LpState state; char reason[128]; } LoaderPlugin;`
+  - `typedef struct LoaderPlugin { wchar_t id[64]; Manifest m; int enabled, is_new; LpState state; char reason[128]; } LoaderPlugin;`
   - `typedef struct LoaderConfig { RonGameInfo game; int install_game_hooks; } LoaderConfig;`
   - `int loader_run(const LoaderConfig *cfg)`: returns the number loaded.
   - `const LoaderPlugin *loader_plugins(int *count)`
@@ -265,23 +266,23 @@ typedef struct RonPluginInfo { uint32_t api_major; int affects_sim; } RonPluginI
   2. Log `loader: game <stock|cbp|unknown> <timestamp hex>`.
   3. If the exe is unknown: log `loader: unknown game build, no plugins loaded` and return 0.
   4. If `<game>\winmm.dll` exists: log `loader: old RON Revived winmm.dll found; uninstall it. No plugins loaded` and return 0.
-  5. Discover (log `loader: skipped folder <X>: no <X>.dll` for each skip), merge with `load-order.txt` (log `loader: <n> listed plugins no longer present` when any were dropped), and rewrite the file only if its contents change.
-  6. Read each `plugin.ini`. Missing → failed, `no plugin.ini`.
+  5. Discover (log `loader: <X>.dll has no <X>.ini, not a plugin` for each skip), merge with `load-order.txt` (log `loader: <n> listed plugins no longer present` when any were dropped), and rewrite the file only if its contents change.
+  6. Read each `<Name>.ini`. Before any plugin code runs: `folder_bad` → failed, `bad Folder value`; a `Folder` that doesn't exist under `plugins\` → failed, `folder <X> not found`; a `Folder` already kept by an enabled plugin higher in the order → failed, `folder <X> already used by <Other>`.
   7. `sym_load(<game>\sbl\rise_z.map)`.
   8. Install the game hooks if asked.
-  9. For each enabled plugin in order: `LoadLibraryExW(path, NULL, LOAD_WITH_ALTERED_SEARCH_PATH)` (failure → `LoadLibrary error <GetLastError>`); `RonPluginMain` missing → `no RonPluginMain`; call it; `api_major != 1` → `API version <n>`; a 0 return → `returned 0`. On any failure: `hm_rollback_owner`, `ev_drop_owner`, `FreeLibrary`, log `loader: plugin <Name> failed: <reason>`. On success log `loader: plugin <Name> <Version> loaded`. `affects_sim` is 1 when the ini or the plugin says 1.
+  9. For each enabled plugin in order that hasn't failed: `LoadLibraryExW(<game>\plugins\<Name>.dll, NULL, LOAD_WITH_ALTERED_SEARCH_PATH)` (failure → `LoadLibrary error <GetLastError>`); `RonPluginMain` missing → `no RonPluginMain`; call it; `api_major != 1` → `API version <n>`; a 0 return → `returned 0`. On any failure: `hm_rollback_owner`, `ev_drop_owner`, `FreeLibrary`, log `loader: plugin <Name> failed: <reason>`. On success log `loader: plugin <Name> <Version> loaded`. `affects_sim` is 1 when the ini or the plugin says 1.
   10. `ev_fire(RON_EV_PRE_INIT, NULL)`, then `hm_lock()` and `ev_lock()`.
-- `api.c` binds each `RonApi` function to the calling plugin's owner index and writes conflict and shared notices as `loader: <PluginA> and <PluginB> both patch 0x<addr> (<shared|conflict>)` (owner 0 is named `loader`). `api->sym(name)` returns `sym_static(name) + delta`, or 0 when the name is unknown.
+- `api.c` binds each `RonApi` function to the calling plugin's owner index and writes conflict and shared notices as `loader: <PluginA> and <PluginB> both patch 0x<addr> (<shared|conflict>)` (owner 0 is named `loader`). `api->sym(name)` returns `sym_static(name) + delta`, or 0 when the name is unknown. `api->folder(self)` returns `<game>\plugins\<Folder>`, or NULL for a plugin without one.
 - Test plugins:
-  - `Good` registers `RON_EV_PRE_INIT` and returns 1.
+  - `Good` registers `RON_EV_PRE_INIT`, checks that `api->folder(self)` ends in `\plugins\GoodFiles`, and returns 1.
   - `Zero` hooks `hk_add1` (found with `GetProcAddress(GetModuleHandleW(NULL), "hk_add1")`) and returns 0.
   - `BadMajor` sets `api_major = 99`.
-  - `NoIni` has a valid DLL without an ini.
+  - `NoIni`, `MissingFolder` and `Twin` are copies of `Good`; only their ini files differ (above).
 
 - [ ] **Step 1:** Tests (temp copy of `build\testgame`, `install_game_hooks = 0`, identity forced to stock):
-  - `run_loads_good_only`: returns 1; `Good` is loaded; `Zero`, `BadMajor`, `NoIni` and `Garbage` are failed with the reasons above (`Garbage`: `LoadLibrary error 193`).
+  - `run_loads_good_only`: returns 1; `Good` is loaded; `Zero`, `BadMajor`, `Garbage`, `MissingFolder` and `Twin` are failed with the reasons above (`Garbage`: `LoadLibrary error 193`; `Twin`: `folder GoodFiles already used by Good`). `NoIni` is not in the list, and the log holds `NoIni.dll has no NoIni.ini`.
   - `run_zero_rolled_back`: `hk_add1(1) == 2` after the run.
-  - `run_writes_order`: `load-order.txt` lists all five, sorted, enabled. A second run leaves the file byte-identical.
+  - `run_writes_order`: `load-order.txt` lists all six (`BadMajor`, `Garbage`, `Good`, `MissingFolder`, `Twin`, `Zero`), enabled. A second run leaves the file byte-identical.
   - `run_disabled_skipped`: `-Good` in the file → state `LP_DISABLED`, returns 0.
   - `run_old_winmm`: with `winmm.dll` present → returns 0 and the log holds the winmm line.
   - `run_unknown_exe`: → returns 0 and logs the unknown-build line.
@@ -312,17 +313,17 @@ typedef struct RonPluginInfo { uint32_t api_major; int affects_sim; } RonPluginI
 ### Task 10: HelloPlugin, dev install, and a real game run
 
 **Files:**
-- Create: `plugins/HelloPlugin/HelloPlugin.c`, `plugins/HelloPlugin/plugin.ini`, `tools/dev-install.ps1`, `tools/dev-uninstall.ps1`, `README.md` section "Building and testing". Modify: `build.ps1` (build `build\plugins\HelloPlugin\`).
+- Create: `plugins/HelloPlugin/HelloPlugin.c`, `plugins/HelloPlugin/HelloPlugin.ini`, `tools/dev-install.ps1`, `tools/dev-uninstall.ps1`, `README.md` section "Building and testing". Modify: `build.ps1` (build `build\plugins\HelloPlugin.dll` and copy `HelloPlugin.ini` beside it).
 
 **Interfaces:**
-- `plugin.ini`: `[Plugin]`, `Name=HelloPlugin`, `Version=1.0`, `Author=RoN Plugin Loader`, `Description=Logs every loader event and counts game frames.`, `AffectsSim=0`.
+- `HelloPlugin.ini`: `[Plugin]`, `Name=HelloPlugin`, `Version=1.0`, `Author=RoN Plugin Loader`, `Description=Logs every loader event and counts game frames.`, `AffectsSim=0`, and no `Folder` (it ships no files).
 - HelloPlugin does three things:
   - It registers all seven events. It logs `pre_init`, `post_init`, `match_built`, `sim_frame first`, `render_frame first`, `match_end sim_frames=<a> hook_calls=<b>` and `shutdown`.
   - It hooks `api->sym("?do_frame@Game@@QAEXXZ")` inline with signature `55 8B EC 6A FF`, stolen 5. Its thiscall detour counts calls, so the hook chains with the loader's own `do_frame` hook.
   - It returns 1.
-- `dev-install.ps1 [-GameDir <path>]` copies `shfolder.dll` and `RonPluginLoader.dll` into the game folder and `plugins\HelloPlugin\*` into `<game>\plugins\HelloPlugin\`. It records every path it created in `<game>\plugins\.dev-installed.txt`, and refuses (exit 1) if `shfolder.dll` or `RonPluginLoader.dll` already exists without that record. `dev-uninstall.ps1` deletes exactly the recorded paths plus `loader.log` and `load-order.txt`, then `plugins\` if it is empty. The default game folder is `C:\Program Files (x86)\Steam\steamapps\common\Rise of Nations`.
+- `dev-install.ps1 [-GameDir <path>]` copies `shfolder.dll` and `RonPluginLoader.dll` into the game folder and `HelloPlugin.dll` + `HelloPlugin.ini` into `<game>\plugins\`. It records every path it created in `<game>\plugins\.dev-installed.txt`, and refuses (exit 1) if `shfolder.dll` or `RonPluginLoader.dll` already exists without that record. `dev-uninstall.ps1` deletes exactly the recorded paths plus `loader.log` and `load-order.txt`, then `plugins\` if it is empty. The default game folder is `C:\Program Files (x86)\Steam\steamapps\common\Rise of Nations`.
 
-- [ ] **Step 1:** Write the HelloPlugin and the two scripts. Run `build.ps1`. Expected: `build\shfolder.dll`, `build\RonPluginLoader.dll`, `build\plugins\HelloPlugin\HelloPlugin.dll` and `plugin.ini` exist.
+- [ ] **Step 1:** Write the HelloPlugin and the two scripts. Run `build.ps1`. Expected: `build\shfolder.dll`, `build\RonPluginLoader.dll`, `build\plugins\HelloPlugin.dll` and `build\plugins\HelloPlugin.ini` exist.
 - [ ] **Step 2:** Ask the user for permission to install into the live game folder for one unattended run. Stop here without it.
 - [ ] **Step 3:** Run `powershell -File tools\dev-install.ps1`. Then, from the workspace root `C:\Users\minus\Projects\RoN`, run:
   - `python -P -E devtools/rondbg/rondbg.py start --autostart "--switch=-automation" --unpause`
@@ -345,6 +346,6 @@ typedef struct RonPluginInfo { uint32_t api_major; int affects_sim; } RonPluginI
 
 ## Not in this plan (next plans, in this order)
 
-1. **File service** (design section 9): hook `String::prepend_content_dir` (`0xA1D690`, decorated `?prepend_content_dir@String@@QBE?AV1@HPADH@Z`); use, folder and generate; the cache folder; the `CreateFileW`/`FindFirstFileExW` fallback; an added `RonApi` minor version.
+1. **File service** (design section 9): hook `String::prepend_content_dir` (`0xA1D690`, decorated `?prepend_content_dir@String@@QBE?AV1@HPADH@Z`); use, folder and generate; serving each plugin's ini `Folder` with no code; never serving top-level names; the cache folder; the `CreateFileW`/`FindFirstFileExW` fallback; an added `RonApi` minor version.
 2. **Plugins panel and restart** (section 8). Needs the file service, which serves the generated `topmenu.xml`.
 3. **Multiplayer check** (section 10). Starts with reverse engineering of the per-player lobby channel, shared with the multiplayer developer.
