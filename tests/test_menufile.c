@@ -1,3 +1,4 @@
+#include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
 #include "check.h"
@@ -141,4 +142,26 @@ TEST(mf_small_cap_fails)
     size_t len = strlen(in);
     CHECK_EQ(menufile_add_plugins(in, len, g_out, len + 10, &w), 0);
     CHECK_EQ(w, MF_FAILED);
+}
+
+/* The list and the notice sit inside the panel's frame, not edge to edge with it: the stock
+   buttons fill x 41..495 (width 454) from y 114, and the frame's border is drawn right there. */
+TEST(mf_list_inset_from_frame)
+{
+    MfWhere w;
+    run(HEAD WORKSHOP TAIL TRIAL, &w);
+    static const char *const names[] = {"plugin_list", "plugin_notice"};
+    for (int i = 0; i < 2; i++) {
+        char key[64];
+        snprintf(key, sizeof key, "name=\"%s\"", names[i]);
+        const char *p = strstr(g_out, key);
+        CHECK(p != NULL);
+        int l = 0, t = 0, wd = 0, h = 0;
+        if (p)
+            CHECK_EQ(sscanf(p + strlen(key), " left=\"%d\" top=\"%d\" width=\"%d\" height=\"%d\"", &l, &t, &wd, &h), 4);
+        CHECK(l >= 41 + 8);
+        CHECK(l + wd <= 41 + 454 - 8);
+        if (i == 0)
+            CHECK(t >= 114 + 4);
+    }
 }

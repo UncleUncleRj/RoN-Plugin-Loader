@@ -72,11 +72,14 @@ static void draw_row(void *sel, const short *L, const PanelSlot *slot, void *box
         rect(rr, left, right, top, top + PANEL_ROW_H);
         game_fill(rr, color);
     }
+
+    /* Everything on the row goes one layer in front of the fill: quads are drawn grouped by
+       texture, not in add order, so a check box at the fill's depth can land under it (ledger
+       draw F7; seen in the game: the selected row had no box). */
+    game_text_begin();
     game_tex(box_off, left + PANEL_BOX_X, top + 1, GC_WHITE);
     if (r->enabled)
         game_tex(box_on, left + PANEL_BOX_X, top + 1, GC_WHITE);
-
-    game_text_begin();
     snprintf(num, sizeof num, "%d", slot->row + 1);
     rect(rr, left, left + PANEL_BOX_X - 4, top + TEXT_DY, top + PANEL_ROW_H);
     game_text(sel, num, rr, 1, ink, TEXT_SIZE);

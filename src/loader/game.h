@@ -34,7 +34,8 @@ const short *game_find_rect(void *win, const char *name);  /* an IFACERECT of th
 void *game_find_tex(void *win, const char *name);          /* an IFACETEX of the window's XML, or NULL */
 void game_tex(void *tex, int x, int y, int color);         /* IFaceRenderManager::add, at its own size */
 void game_fill(const short r[4], int color);               /* IFaceRenderManager::add, solid */
-void game_text_begin(void);                                /* text in front of the textures: depth + 1 */
+void game_text_begin(void);                                /* what follows draws in front of the textures and
+                                                              fills added before: depth + 1 */
 void game_text_end(void);
 /* utf8 in rect r (left or right aligned), size 12-ish, colour GC_*; returns the text's left x when
    right aligned, else r[0]. */
