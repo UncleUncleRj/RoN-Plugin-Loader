@@ -37,10 +37,9 @@ Non-goals
 - Loading or unloading plugins while the game runs. Changing the order or the on/off state takes
   effect after a restart; the panel restarts the game for the player.
 - Mods made only of files, with no DLL (art or data packages). The game's own mod system (local
-  `mods\` folders and Steam Workshop items)
-  keeps loading those. Every plugin is a DLL. A plugin with no files of its own, such as a
-  developer-tools DLL that changes the game's data in code, is an ordinary plugin: a DLL and its
-  ini, with no `Folder` (user, 2026-11-24).
+  `mods\` folders and Steam Workshop items) keeps loading those. Every plugin is a DLL. A plugin
+  with no files of its own, such as a developer-tools DLL that changes the game's data in code, is
+  an ordinary plugin: a DLL and its ini, with no `Folder` (user, 2026-11-24).
 - Plugins for the launcher (`patriots.exe`): the bootstrap does not load there.
 - Distributing DLLs through the Steam Workshop.
 
