@@ -189,6 +189,14 @@ int panel_description(const Panel *p, PanelLine out[PANEL_DESC_LINES], int wrap_
             snprintf(hooks + hl - 1, sizeof hooks - hl + 1, ", serves %d files.", r->files);
         line(&out[n++], PANEL_TONE_DIM, "%s%s", hooks, "");
     }
+    /* every line fits the box: a narrow menu column (a mod's restyled menu) cuts a long one with
+       "..." (the description's two lines are already wrapped to the width) */
+    for (int i = 0; i < n && wrap_chars > 3; i++) {
+        if (chars_of(out[i].text) > wrap_chars) {
+            size_t cut = take(out[i].text, wrap_chars - 3, sizeof out[i].text - 4);
+            memcpy(out[i].text + cut, "...", 4);
+        }
+    }
     return n;
 }
 

@@ -256,10 +256,10 @@ static const uint8_t k_push_seh_mask[7] = {1, 1, 1, 0, 0, 0, 0};
 static int hook_export(HMODULE kb, const char *name, void *detour, void **orig)
 {
     uintptr_t at = (uintptr_t)GetProcAddress(kb, name);
-    RonResult r = RON_E_ARG;
-    if (at && memcmp((const void *)at, k_prologue, 5) == 0)
-        r = hm_inline(0, at, k_prologue, NULL, 5, 5, detour, orig);
-    else if (at)
+    /* A plugin may have hooked it already (RON Revived hooks CreateFileW): the hook manager then
+       compares the signature with the stock bytes it kept, not with the jmp in memory. */
+    RonResult r = at ? hm_inline(0, at, k_prologue, NULL, 5, 5, detour, orig) : RON_E_ARG;
+    if (r == RON_E_SIG)
         r = hm_inline(0, at, k_push_seh, k_push_seh_mask, 7, 7, detour, orig);
     if (r != RON_OK)
         log_line("loader", "files: %s not hooked (%d)", name, (int)r);

@@ -232,6 +232,15 @@ static int listing(const wchar_t *pattern, char *names, int cap)
     return n;
 }
 
+typedef HANDLE(WINAPI *CreateW)(LPCWSTR, DWORD, DWORD, LPSECURITY_ATTRIBUTES, DWORD, DWORD, HANDLE);
+static CreateW g_plugin_create_orig;
+static int g_plugin_creates;
+static HANDLE WINAPI plugin_create(LPCWSTR n, DWORD a, DWORD s, LPSECURITY_ATTRIBUTES sa, DWORD d, DWORD f, HANDLE t)
+{
+    g_plugin_creates++;
+    return g_plugin_create_orig(n, a, s, sa, d, f, t);
+}
+
 TEST(files_win32_hooks_serve_reads_and_merge_listings)
 {
     fresh();
@@ -248,11 +257,18 @@ TEST(files_win32_hooks_serve_reads_and_merge_listings)
     hm_reset();
     fs_win32_forget();
     CHECK_EQ(fs_folder(1, root, NULL), RON_OK);
+    /* a plugin hooked CreateFileW first (RON Revived does): the loader's link still goes on */
+    static const uint8_t prologue[5] = {0x8B, 0xFF, 0x55, 0x8B, 0xEC};
+    CHECK_EQ(hm_inline(1, (uintptr_t)GetProcAddress(GetModuleHandleW(L"kernelbase.dll"), "CreateFileW"), prologue,
+                       NULL, 5, 5, (void *)plugin_create, (void **)&g_plugin_create_orig),
+             RON_OK);
     CHECK_EQ(fs_win32_install(), 6);
+    g_plugin_creates = 0;
     char buf[256], names[512];
     path_of(L"Data\\a.txt", p);
     read_w(p, buf, sizeof buf);
     CHECK_STR(buf, "plugin a");
+    CHECK(g_plugin_creates >= 1);  /* the plugin's link still runs, under the loader's */
     path_of(L"Data\\b.txt", p);
     read_w(p, buf, sizeof buf);
     CHECK_STR(buf, "game b");
