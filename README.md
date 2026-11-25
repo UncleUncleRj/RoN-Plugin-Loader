@@ -8,9 +8,9 @@ panel in the main menu. Plugins can replace, add or generate game files, hook ga
 functions through one shared hook manager, and declare whether they change the simulation, so a
 multiplayer lobby can check that every player runs the same set.
 
-Status: the loader core works (bootstrap, load order, plugin API v1, shared hooks, events), proven in
-a real game run, and so does the Plugins panel (checked in the game, 2026-11-25). Not built yet: the
-file service and the multiplayer check. Design:
+Status: the loader works (bootstrap, load order, plugin API 1.1, shared hooks, events, the file
+service, the Plugins panel), checked in the game (2026-11-24 and 25). RON Revived runs on it as a
+plugin (its own repository, Revived-Mod). Not built yet: the multiplayer check. Design:
 `docs/design.md`; build plans: `docs/plans/`. `python tools/plan_html.py <plan.md> <out.html>` turns a
 plan into one HTML page for review.
 
@@ -43,6 +43,24 @@ powershell -File tools\dev-uninstall.ps1    # removes exactly what dev-install p
 folder; both scripts take `-GameDir <path>`. While installed, the loader writes
 `<game>\plugins\loader.log` at every start, and HelloPlugin logs every event into it.
 
+## Files from plugins
+
+A plugin's ini `Folder` (a subfolder of `plugins\`, laid out like the game folder) is served to the
+game without any code: when the game asks for `Data\rules.xml`, `art\x.tga` or `masks.txt`, the
+lowest plugin in the load order that has that file wins, ahead of the game's own mods and the
+install. API 1.1 adds `file_use` (one file), `file_folder` (another folder), `file_generate` (a file
+made when it is first asked for, from the version that would win without the plugin) and
+`file_path` (which file the game reads). Programs and libraries (`.dll`, `.exe`, ...) and anything
+under `plugins\` or `mods\` are never served. The service hooks `String::prepend_content_dir`, the
+game's own lookup, and KernelBase's `CreateFileW`, `GetFileAttributes(Ex)W` and
+`FindFirstFileExW` (with `FindNextFileW` / `FindClose`) for readers that skip it; a folder listing
+shows a plugin's added files and folders (a new script appears in the game setup). Reads only:
+writes go where the game aims them. With no plugin serving files the hooks are not installed.
+
+`RON_EV_LIBRARY` (API 1.1) fires once each for the renderer (`d3dgl.dll`) and the sound library
+(`dssl.dll`) right after the game loads them, with the hook calls open for addresses inside that
+library while the callbacks run.
+
 ## The Plugins panel
 
 Main menu, **Tools & Extras → Plugins** (directly under Steam Workshop). The button and the panel
@@ -62,6 +80,7 @@ Files the loader keeps in `<game>\plugins\`:
 | `loader.log` | This start's log |
 | `.start-marker` | Written while plugins load, removed once the main menu is up. Found at start, it means the last start never reached the menu: that start loads no plugins (safe start) and the panel says so |
 | `.cache\topmenu.xml` | The game's `topmenu.xml` with the Plugins button and panel added, written at every start and served to the game in place of its own |
+| `.cache\gen\<plugin>\` | Files plugins generate (`file_generate`), emptied at every start |
 
 ## Test plugins
 
@@ -78,7 +97,7 @@ skips the intros). Copy `SplashTestN.dll`, `SplashTestN.ini` and the `SplashTest
 |---|---|
 | `include/ron_plugin.h` | The plugin API, the only header a plugin includes |
 | `src/bootstrap/` | The start of `shfolder.dll`: loads at process start, hooks `Main::main`, runs the loader from there |
-| `src/loader/` | The loader, built into `shfolder.dll`: load order, plugin ini files, symbol map, hook manager, events, API, safe start, the Plugins panel (`panel.c` state, `menufile.c` the generated menu file, `menu.c` and `menu_draw.c` the menu hooks and drawing, `game.c` the engine calls they use) |
+| `src/loader/` | The loader, built into `shfolder.dll`: load order, plugin ini files, symbol map, hook manager, events, API, safe start, the file service (`files.c` who serves what, `files_game.c` the hook on the game's own lookup, `files_win32.c` KernelBase's file calls and merged folder listings), the Plugins panel (`panel.c` state, `menufile.c` the generated menu file, `menu.c` and `menu_draw.c` the menu hooks and drawing, `game.c` the engine calls they use) |
 | `src/common/` | Exe identity |
 | `plugins/HelloPlugin/` | The example plugin |
 | `plugins/SplashTest/` | The two load-order test plugins (one source) and their ini files |
