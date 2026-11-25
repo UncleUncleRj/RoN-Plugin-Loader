@@ -288,3 +288,51 @@ TEST(panel_empty)
     CHECK_EQ(panel_layout(&g_p, 328, s, 4), 0);
     CHECK(panel_notice(&g_p) == NULL);
 }
+
+/* Final review: with more plugins than rows fit (156 px: 5 rows), Move Up/Down keep the selected row
+   in view, and the list can say how many rows are hidden above and below. */
+static void twenty(void)
+{
+    for (int i = 0; i < 20; i++) {
+        wchar_t id[16];
+        swprintf(id, 16, L"P%02d", i);
+        plugin(i, id, "", "", 1, LP_LOADED, "");
+        g_hooks[i] = 0;
+    }
+    panel_init(&g_p, g_pl, 20, g_hooks, 0);
+}
+
+TEST(panel_move_keeps_selection_visible)
+{
+    twenty();
+    panel_select(&g_p, 4);
+    CHECK_EQ(panel_move(&g_p, +1), 1);
+    panel_keep_visible(&g_p, 156);
+    CHECK_EQ(g_p.selected, 5);
+    CHECK_EQ(g_p.scroll, 1);
+    panel_select(&g_p, 1);
+    CHECK_EQ(panel_move(&g_p, -1), 1);
+    panel_keep_visible(&g_p, 156);
+    CHECK_EQ(g_p.scroll, 0);
+    panel_select(&g_p, -1);
+    g_p.scroll = 3;
+    panel_keep_visible(&g_p, 156);
+    CHECK_EQ(g_p.scroll, 3);
+}
+
+TEST(panel_more_counts)
+{
+    twenty();
+    int above = -1, below = -1;
+    panel_more(&g_p, 156, &above, &below);
+    CHECK_EQ(above, 0);
+    CHECK_EQ(below, 15);
+    panel_scroll(&g_p, 156, -5);
+    panel_more(&g_p, 156, &above, &below);
+    CHECK_EQ(above, 5);
+    CHECK_EQ(below, 10);
+    Panel *p = three();
+    panel_more(p, 156, &above, &below);
+    CHECK_EQ(above, 0);
+    CHECK_EQ(below, 0);
+}

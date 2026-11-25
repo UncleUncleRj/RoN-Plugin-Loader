@@ -219,6 +219,30 @@ void panel_scroll(Panel *p, int list_h, int notches)
     p->scroll = s < 0 ? 0 : s > max ? max : s;
 }
 
+static int visible_rows(int list_h)
+{
+    int v = (list_h - PANEL_INTRO_H) / PANEL_ROW_H;
+    return v > 0 ? v : 1;
+}
+
+void panel_keep_visible(Panel *p, int list_h)
+{
+    if (p->selected < 0 || p->selected >= p->n)
+        return;
+    int v = visible_rows(list_h);
+    if (p->selected < p->scroll)
+        p->scroll = p->selected;
+    else if (p->selected >= p->scroll + v)
+        p->scroll = p->selected - v + 1;
+}
+
+void panel_more(const Panel *p, int list_h, int *above, int *below)
+{
+    int rest = p->n - p->scroll - visible_rows(list_h);
+    *above = p->scroll;
+    *below = rest > 0 ? rest : 0;
+}
+
 const char *panel_notice(const Panel *p)
 {
     if (p->save_failed)

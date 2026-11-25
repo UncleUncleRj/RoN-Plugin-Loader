@@ -173,6 +173,9 @@ static void THISCALL d_sel_button(void *sel, const void *name)
         int up = gs_is(name, "plugins_up"), down = gs_is(name, "plugins_down");
         if (up || down) {
             panel_move(&g_panel, up ? -1 : 1);
+            const short *L = game_find_rect(sel, "plugin_list");
+            if (L)
+                panel_keep_visible(&g_panel, L[3] - L[2]);
             game_click();
             return;
         }

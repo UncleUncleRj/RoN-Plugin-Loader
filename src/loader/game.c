@@ -177,11 +177,12 @@ static int text(void *win, const char *utf8, const short r[4], int align, int co
 {
     static wchar_t wide[512];  /* the wide constructor keeps this pointer while the String lives */
     char *buf = (char *)win + WIN_BUFFER;
+    int none = align == GT_RIGHT ? r[1] : r[0];  /* nothing drawn: a right-aligned text ends where it began */
     if (!utf8 || !*utf8)
-        return r[0];
+        return none;
     void *font = ((FontGetFn)VA(0x522810))((void *)VA(FONTS), size, style);
     if (!font && !*(void **)(buf + BUF_FONT))
-        return r[0];
+        return none;
     unsigned char saved[12], saved_colors[BUF_COLORS_N];
     memcpy(saved, buf + BUF_FONT, 12);
     memcpy(saved_colors, buf + BUF_COLORS, BUF_COLORS_N);

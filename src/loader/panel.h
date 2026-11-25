@@ -53,6 +53,8 @@ int panel_description(const Panel *p, PanelLine out[PANEL_DESC_LINES]);  /* the 
 int panel_layout(const Panel *p, int list_h, PanelSlot *out, int max);  /* visible rows only */
 int panel_hit(const Panel *p, int list_h, int x, int y, int *on_box);   /* row or -1 */
 void panel_scroll(Panel *p, int list_h, int notches);                   /* positive = toward row 0 */
+void panel_keep_visible(Panel *p, int list_h);                          /* scrolls the selected row into view */
+void panel_more(const Panel *p, int list_h, int *above, int *below);    /* rows hidden above and below */
 const char *panel_notice(const Panel *p);       /* NULL or a notice */
 int panel_save(Panel *p, const wchar_t *path);  /* 0 and save_failed = 1 on failure */
 

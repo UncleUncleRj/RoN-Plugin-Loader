@@ -166,6 +166,20 @@ static void draw_list(void *sel)
     game_text(sel, "Top loads first.", rr, GT_LEFT, GC_GREY, TEXT_SIZE);
     rect(rr, L[0] + PAD, L[1] - PAD, L[2] + 3 + PANEL_LINE_H, L[2] + 3 + 2 * PANEL_LINE_H);
     game_text(sel, "Lower plugins win when two change the same thing.", rr, GT_LEFT, GC_GREY, TEXT_SIZE);
+    /* More plugins than rows fit: say so beside the intro (the wheel scrolls the list). */
+    int above, below;
+    panel_more(&g_panel, list_h, &above, &below);
+    char more[32];
+    if (above) {
+        snprintf(more, sizeof more, "%d more above", above);
+        rect(rr, L[0] + PAD, L[1] - PAD, L[2] + 3, L[2] + 3 + PANEL_LINE_H);
+        game_text(sel, more, rr, GT_RIGHT, GC_WHITE, TEXT_SIZE);
+    }
+    if (below) {
+        snprintf(more, sizeof more, "%d more below", below);
+        rect(rr, L[0] + PAD, L[1] - PAD, L[2] + 3 + PANEL_LINE_H, L[2] + 3 + 2 * PANEL_LINE_H);
+        game_text(sel, more, rr, GT_RIGHT, GC_WHITE, TEXT_SIZE);
+    }
     if (g_panel.n == 0) {
         char lines[3][128];
         int n = wrap_words("No plugins installed. Put a plugin's .dll and .ini in the plugins folder.", lines, 3, 60);
