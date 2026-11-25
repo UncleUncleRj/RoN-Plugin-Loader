@@ -24,7 +24,10 @@ int hm_owner_count(int owner);
 
 /* Undoes the owner's links and patches (the owner is the newest link in every chain it touched). */
 void hm_rollback_owner(int owner);
-void hm_lock(void);    /* afterwards every request returns RON_E_STATE */
+void hm_lock(void);    /* afterwards every request returns RON_E_STATE, except inside an open window */
+/* While locked, accept requests that lie wholly inside [lo, hi) (a library being announced by
+   RON_EV_LIBRARY); hm_window(0, 0) closes it. */
+void hm_window(uintptr_t lo, uintptr_t hi);
 void hm_reset(void);   /* roll back every owner, newest first, and unlock (tests) */
 void hm_set_notify(HmNotify fn);
 

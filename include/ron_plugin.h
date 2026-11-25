@@ -11,8 +11,9 @@
  *    from the symbol map with api->va(), or look a function up by its decorated name with
  *    api->sym(). An address that is not committed, readable memory gets RON_E_ARG.
  *  - Hooks and byte patches are accepted only inside RonPluginMain (so every chain follows the load
- *    order); event registrations inside RonPluginMain and during the RON_EV_PRE_INIT event. Later
- *    calls return RON_E_STATE. Nothing is ever unhooked.
+ *    order), and during RON_EV_LIBRARY for addresses inside the library it announces; event
+ *    registrations inside RonPluginMain and during the RON_EV_PRE_INIT event. Later calls return
+ *    RON_E_STATE. Nothing is ever unhooked. A plugin may patch over its own earlier byte patches.
  *  - The API is for the game's main thread (RonPluginMain and event callbacks). Plugins must not
  *    call it, or engine code, from their own threads.
  *  - A detour must take its arguments the way the game really passes them, which is not always what
@@ -36,16 +37,21 @@ extern "C" {
 #endif
 
 #define RON_API_MAJOR 1
-#define RON_API_MINOR 0
+#define RON_API_MINOR 1   /* 1: files (file_use, file_folder, file_generate, file_path) and RON_EV_LIBRARY */
 
 typedef struct RonPlugin RonPlugin;   /* opaque, one per plugin */
 
 typedef enum { RON_OK = 0, RON_E_ARG, RON_E_SIG, RON_E_CONFLICT, RON_E_STATE, RON_E_MEM } RonResult;
 typedef enum { RON_EXE_UNKNOWN = 0, RON_EXE_STOCK, RON_EXE_CBP } RonExeKind;
 /* RON_EV_RENDER_FRAME fires for every drawn picture of a match (from its loading screen on), not in
-   the menus. */
+   the menus.
+   RON_EV_LIBRARY (minor 1) fires once for each library the game loads after plugins: the renderer
+   (d3dgl.dll, inside GraphSys::init_system) and the sound library (dssl.dll, SoundSys::init_system),
+   with game_object = its HMODULE. During the callback the hook calls (hook_inline, hook_call,
+   hook_ptr, patch_bytes) accept addresses inside that library's image, in load order, as they do in
+   RonPluginMain for everything else. Check the library's own TimeDateStamp before hooking it. */
 typedef enum { RON_EV_PRE_INIT, RON_EV_POST_INIT, RON_EV_MATCH_BUILT, RON_EV_SIM_FRAME,
-               RON_EV_RENDER_FRAME, RON_EV_MATCH_END, RON_EV_SHUTDOWN, RON_EV_COUNT } RonEvent;
+               RON_EV_RENDER_FRAME, RON_EV_MATCH_END, RON_EV_SHUTDOWN, RON_EV_LIBRARY, RON_EV_COUNT } RonEvent;
 
 typedef struct RonGameInfo {
     RonExeKind exe;          /* stock riseofnations.exe or CBP's riseofnations_CBP.exe */
@@ -58,6 +64,14 @@ typedef struct RonGameInfo {
    NULL for pre_init, post_init and shutdown. */
 typedef void(__cdecl *RonEventFn)(RonEvent ev, void *game_object, void *user);
 
+/* A file generator (minor 1). in_path is the file that would win without this plugin (the plugins
+   above it, else the game's mods, else the base install); the generator writes its own version to
+   out_path (its folders exist) and returns nonzero, or returns 0 to leave the file as it was. It runs
+   once per start, the first time the game asks for the file, on whichever thread asks: it may only
+   read and write files, never call engine code. Generators of files the simulation reads must give
+   the same output on every machine (no clock, no random numbers, no local settings). */
+typedef int(__cdecl *RonFileGenFn)(const char *game_rel, const wchar_t *in_path, const wchar_t *out_path,
+                                   void *user);
 typedef struct RonApi {
     uint32_t major, minor;
     /* One line in <game>\plugins\loader.log, tagged with the plugin's name. */
@@ -81,6 +95,26 @@ typedef struct RonApi {
                                     uint32_t len);
     RonResult(__cdecl *on_event)(RonPlugin *self, RonEvent ev, RonEventFn fn, void *user);
     const wchar_t *(__cdecl *folder)(RonPlugin *self);          /* <game>\plugins\<Folder>, NULL without one */
+
+    /* ---- minor 1: files. Check api->minor >= 1 before using these. ----
+     * game_rel is a path relative to the game folder as the game asks for it ("Data\\rules.xml",
+     * "art\\x.tga", "masks.txt"); case and / or \ don't matter. Programs and libraries (.dll, .exe,
+     * ...) and anything under plugins\ or mods\ are never served (RON_E_ARG). The plugin's ini Folder
+     * is served without any call, as if file_folder had been called on it first. When two plugins
+     * serve one name, the lower one in the load order wins; a plugin's own later call wins over its
+     * earlier ones. Files are served to the game's own lookup (String::prepend_content_dir, so a
+     * plugin wins over the game's mods) and to every read of <game>\<game_rel> in the process
+     * (CreateFileW, attribute queries, FindFirstFileExW); folder listings show a plugin's added files
+     * and folders. Calls are accepted inside RonPluginMain and during RON_EV_PRE_INIT. */
+    /* Serve `path` for game_rel. A relative path is taken inside the plugin's Folder. */
+    RonResult(__cdecl *file_use)(RonPlugin *self, const char *game_rel, const wchar_t *path);
+    /* Serve every file in this folder at its path relative to it (laid out like the game folder). */
+    RonResult(__cdecl *file_folder)(RonPlugin *self, const wchar_t *folder);
+    /* Make game_rel with fn when it is first asked for (see RonFileGenFn). */
+    RonResult(__cdecl *file_generate)(RonPlugin *self, const char *game_rel, RonFileGenFn fn, void *user);
+    /* The file the game reads for game_rel after every plugin, or the base install's copy when no
+       plugin serves it (the game's own mods are not consulted). Returns 0 when it does not fit. */
+    int(__cdecl *file_path)(const char *game_rel, wchar_t *out, uint32_t cap);
 } RonApi;
 
 typedef struct RonPluginInfo {

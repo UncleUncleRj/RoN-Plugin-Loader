@@ -1,6 +1,6 @@
 # RoN Plugin Loader: design
 
-Status: draft for approval, 2026-11-24. Target: Rise of Nations: Extended Edition on Steam,
+Status: approved 2026-11-24; built 2026-11-24/25 except the multiplayer check (section 10). Target: Rise of Nations: Extended Edition on Steam,
 `riseofnations.exe` with PE TimeDateStamp `0x6674863F` (32-bit, image base `0x400000`, ASLR on).
 Addresses below are virtual addresses at that base, named from the game's own symbol map
 (`<game>\sbl\rise_z.map`). The engine facts come from the RoN Engine Atlas (pages "Mods", "Menus",
@@ -170,6 +170,7 @@ function pointers (no C++ ABI across the boundary). Version 1 provides:
 | `sim_frame` | the only call of `Game::do_frame` (`0x591EF0`), at `Game::loop+0x14E` (`0x5916BE`) | One simulation frame (1/15 s of game time). A call-site hook, so a tool that hooks `do_frame`'s entry (a Frida agent does) doesn't silence it |
 | `render_frame` | `Game::loop_render` (`0x5917E0`) | Once per drawn picture of a match, from its loading screen on. Not in the menus: in 12 s on the main menu it never fired (2026-11-24) |
 | `match_end` | `Game::close` (`0x594B80`) | Once per match: the first `Game::close` after `match_built`. The game also calls `Game::close` to clear before it builds a match, and twice when a match ends (`Game::run`) |
+| `library` (API 1.1) | the returns of `GraphSys::init_system` (`0x539665`) and `SoundSys::init_system` (`0x598627`) | Once per library (`d3dgl.dll`, `dssl.dll`), `game_object` = its `HMODULE`; hooks inside it accepted during the callbacks |
 | `shutdown` | the return of `Main::run_game_loop`, called once at `Main::main+0x913` (`0x561603`) | `Main::shutdown` (`0x5966A0`) is not reached on a console quit: a trace showed the process ending inside `SteamAuthentication` (Get, CancelSteamAuthTicket) first, in a run with Steam kept out |
 
 Events fire in load order. Plugins must not call engine code from their own threads.
@@ -374,6 +375,15 @@ Rules:
 - Generated files go to a cache folder outside the game install that needs no admin rights, one
   subfolder per plugin, emptied at every start, so a changed plugin never leaves a stale file. The
   folder stays readable so modders can open what a plugin produced.
+- Built 2026-11-25 (API 1.1). Decisions made in the build: top-level names are served too (a mod's
+  `masks.txt`), except programs and libraries (`.dll .exe .asi .sys .ocx .cpl .drv .scr .com`) and
+  anything under `plugins\` or `mods\`, which no plugin may replace; generated files go to
+  `plugins\.cache\gen\<plugin id>\`, beside the menu file's cache (emptied at every start; the
+  loader already writes there); `file_use` and `file_folder` take a path inside the plugin's Folder
+  when it is relative; registrations stay open through `pre_init` (claims are ordered by load order,
+  not by time); the KernelBase hooks go in only when some plugin serves files, after the plugins
+  loaded. A folder listing of the game folder itself is never merged (a plugin's settings files
+  would show), only of its subfolders.
 - Readers that bypass `prepend_content_dir` need a fallback: the renderer DLL most likely reads
   its shader files (`shaders\*.hlsl`) itself (not checked). RON Revived's `CreateFileW` redirect
   (`src/override.c`) is the pattern.
@@ -432,6 +442,8 @@ First version
    `.ini` files.
 2. API v1: log, game identity, symbol lookup, events, hooks with chaining.
 3. File service: use, folder, generate; the `CreateFileW`/`FindFirstFileExW` fallback where needed.
+   Built 2026-11-25 (API 1.1), with `file_path`; RON Revived's 440 files run from it (its menu,
+   data, Survival script and map style, checked in the game).
 4. Plugins panel under Tools & Extras (on/off, order, details, "new"/"failed" tags, apply and
    restart, safe start). Built and checked in the game 2026-11-25, with the load-order test
    plugins SplashTest1 and SplashTest2 (each replaces the first intro video; the lower one wins).
@@ -460,6 +472,10 @@ Later
   the save format unchanged) and warn when loaded with a different list (my call to leave this out
   of the first version; until then a replay played without its plugins diverges silently).
 - The in-game debug overlay discussed earlier becomes a plugin.
+- Built 2026-11-25 as `RON_EV_LIBRARY` (API 1.1): after the calls of `GraphSys::init_system`
+  (`bighuge_init_real+0x35`) and `SoundSys::init_system` (`System::init_sound+0x1F7`), which take
+  their String in ECX (a private convention; the detours are `__fastcall`); hooks accepted inside
+  that library's image while the callbacks run. RON Revived's d3dgl hooks use it. The first idea:
 - An event when the renderer (`d3dgl.dll`) or the sound library loads, with hooks allowed in it in
   load order, so plugins can hook their code through the API. They load inside `System::init`,
   after plugins; the SplashTest plugins work around it by hooking `Video::init` in the executable
@@ -493,6 +509,9 @@ Later
 
 - Online multiplayer through the `shfolder.dll` proxy is untested (needs two machines);
   `CrossplayNetLib` really calls `SHGetFolderPathW`, so the forward must be exact.
+- (Partly answered 2026-11-25: the KernelBase fallback serves every read of `<game>\<name>`, and the
+  game setup's Script list shows a plugin's added script; which readers skip the game's lookup was
+  not counted.)
 - Which game readers bypass `String::prepend_content_dir`, and which folder listings need added
   files merged in.
 - The per-player lobby channel (section 10), and whether LAN or direct-connect games use the same

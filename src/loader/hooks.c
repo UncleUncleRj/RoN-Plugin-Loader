@@ -21,6 +21,7 @@ typedef struct Record {
     uint32_t stock_len;        /* bytes saved in stock (>= len; inline keeps the whole signature span) */
     uint8_t stock[MAX_BYTES];  /* the bytes before anyone changed them */
     int creator;
+    unsigned seq;              /* creation order: rollback undoes newest first */
     void *base;                /* what the first link's *orig is: trampoline, callee or old pointer */
     Link links[MAX_LINKS];
     int nlinks;
@@ -28,11 +29,27 @@ typedef struct Record {
 
 static Record g_rec[MAX_RECORDS];
 static int g_locked;
+static unsigned g_seq;
+static uintptr_t g_win_lo, g_win_hi;  /* while locked, requests inside [lo, hi) are still accepted */
 static HmNotify g_notify;
 static uint8_t *g_pool, *g_pool_end;
 
 void hm_set_notify(HmNotify fn) { g_notify = fn; }
 void hm_lock(void) { g_locked = 1; }
+
+void hm_window(uintptr_t lo, uintptr_t hi)
+{
+    g_win_lo = lo;
+    g_win_hi = hi;
+}
+
+/* Requests are open before the lock, and afterwards only inside the open window (a library event). */
+static int open_for(uintptr_t at, uint32_t n)
+{
+    if (!g_locked)
+        return 1;
+    return g_win_hi > g_win_lo && at >= g_win_lo && at + n <= g_win_hi && at + n >= at;
+}
 
 static void notify(int owner, int other, uintptr_t at, int kind)
 {
@@ -127,6 +144,7 @@ static Record *new_record(void)
         if (!g_rec[i].used) {
             memset(&g_rec[i], 0, sizeof g_rec[i]);
             g_rec[i].used = 1;
+            g_rec[i].seq = ++g_seq;
             return &g_rec[i];
         }
     }
@@ -189,7 +207,7 @@ static RonResult conflict(int owner, Record *other, uintptr_t at)
 RonResult hm_inline(int owner, uintptr_t at, const uint8_t *sig, const uint8_t *mask, uint32_t sig_len,
                     uint32_t stolen, void *detour, void **orig)
 {
-    if (g_locked)
+    if (!open_for(at, sig_len))
         return RON_E_STATE;
     if (!at || !sig || !detour || !orig || stolen < 5 || stolen > sig_len || sig_len > MAX_BYTES)
         return RON_E_ARG;
@@ -245,7 +263,7 @@ RonResult hm_inline(int owner, uintptr_t at, const uint8_t *sig, const uint8_t *
 
 RonResult hm_call(int owner, uintptr_t site, void *detour, void **orig)
 {
-    if (g_locked)
+    if (!open_for(site, 5))
         return RON_E_STATE;
     if (!site || !detour || !orig || !readable(site, 5))
         return RON_E_ARG;
@@ -276,7 +294,7 @@ RonResult hm_call(int owner, uintptr_t site, void *detour, void **orig)
 
 RonResult hm_ptr(int owner, uintptr_t slot, uintptr_t expected, void *detour, void **orig)
 {
-    if (g_locked)
+    if (!open_for(slot, 4))
         return RON_E_STATE;
     if (!slot || !detour || !orig || !readable(slot, 4))
         return RON_E_ARG;
@@ -308,13 +326,17 @@ RonResult hm_ptr(int owner, uintptr_t slot, uintptr_t expected, void *detour, vo
 
 RonResult hm_patch(int owner, uintptr_t at, const uint8_t *expect, const uint8_t *bytes, uint32_t len)
 {
-    if (g_locked)
+    if (!open_for(at, len))
         return RON_E_STATE;
     if (!at || !expect || !bytes || len == 0 || len > MAX_BYTES || !readable(at, len))
         return RON_E_ARG;
-    Record *o = find_overlap(at, len, NULL);
-    if (o)
-        return conflict(owner, o, at);
+    /* Only the owner's own byte patches may lie under a new one: a plugin may patch over its own
+       patch (the newer one is undone first on rollback), never over anyone's hook or patch. */
+    for (int i = 0; i < MAX_RECORDS; i++) {
+        Record *r = &g_rec[i];
+        if (r->used && at < r->at + r->len && r->at < at + len && !(r->kind == K_PATCH && r->creator == owner))
+            return conflict(owner, r, at);
+    }
     if (memcmp((const void *)at, expect, len) != 0)
         return RON_E_SIG;
     Record *r = new_record();
@@ -332,12 +354,21 @@ RonResult hm_patch(int owner, uintptr_t at, const uint8_t *expect, const uint8_t
     return RON_OK;
 }
 
+/* The used record with the highest seq below `below`, or NULL. */
+static Record *newest_below(unsigned below)
+{
+    Record *best = NULL;
+    for (int i = 0; i < MAX_RECORDS; i++) {
+        Record *r = &g_rec[i];
+        if (r->used && r->seq < below && (!best || r->seq > best->seq))
+            best = r;
+    }
+    return best;
+}
+
 void hm_rollback_owner(int owner)
 {
-    for (int i = MAX_RECORDS - 1; i >= 0; i--) {
-        Record *r = &g_rec[i];
-        if (!r->used)
-            continue;
+    for (Record *r = newest_below(~0u); r; r = newest_below(r->seq)) {
         if (r->kind == K_PATCH) {
             if (r->creator == owner) {
                 write_mem(r->at, r->stock, r->len);
@@ -373,6 +404,7 @@ void hm_reset(void)
     for (int o = max_owner; o >= 0; o--)
         hm_rollback_owner(o);
     g_locked = 0;
+    g_win_lo = g_win_hi = 0;
 }
 
 int hm_owner_count(int owner)

@@ -9,6 +9,9 @@
 #include "loader/symbols.h"
 #include "loader/safestart.h"
 #include "loader/menu.h"
+#include "loader/files.h"
+#include "loader/files_win32.h"
+#include "loader/files_game.h"
 #include "common/identity.h"
 
 static int g_safe;  /* this start loads no plugins: the last one never reached the menu */
@@ -69,6 +72,13 @@ const wchar_t *loader_owner_folder(int owner)
     if (owner >= 1 && owner <= g_count && g_folders[owner - 1][0])
         return g_folders[owner - 1];
     return NULL;
+}
+
+const wchar_t *loader_owner_id(int owner)
+{
+    if (owner >= 1 && owner <= g_count)
+        return g_plugins[owner - 1].id;
+    return L"loader";
 }
 
 static void to_utf8(const wchar_t *w, char *out, int cap)
@@ -220,6 +230,13 @@ static int load_plugin(int i)
         fail(p, "no RonPluginMain");
         return 0;
     }
+    /* its Folder is served from the start, as if it had called file_folder first (design section 9) */
+    if (g_folders[i][0]) {
+        int files = 0;
+        if (fs_folder(owner, g_folders[i], &files) != RON_OK)
+            log_line("loader", "%s: its folder could not be read in full", p->m.name);
+        log_line("loader", "%s serves %d files from its folder", p->m.name, files);
+    }
     RonPluginInfo info = {0, 0};
     int ok = main_fn(api_table(), &g_handles[i], &info);
     reason[0] = 0;
@@ -230,6 +247,7 @@ static int load_plugin(int i)
     if (reason[0]) {
         hm_rollback_owner(owner);
         ev_drop_owner(owner);
+        fs_drop_owner(owner);
         FreeLibrary(mod);
         fail(p, reason);
         return 0;
@@ -304,7 +322,10 @@ int loader_run(const LoaderConfig *cfg)
         log_line("loader", "symbols: sbl\\rise_z.map missing or for another build; api->sym finds nothing");
 
     if (cfg->install_game_hooks)
-        log_line("loader", "event hooks: %d of 6 installed", ev_install_game_hooks(g_game.delta));
+        log_line("loader", "event hooks: %d of 8 installed", ev_install_game_hooks(g_game.delta));
+    /* generated files: emptied at every start */
+    _snwprintf(path, MAX_PATH, L"%ls\\.cache\\gen", g_plugins_dir);
+    fs_init(g_game_dir, path);
 
     hm_set_notify(api_notify);
     ev_register(0, RON_EV_POST_INIT, on_menu_up, NULL);
@@ -318,6 +339,12 @@ int loader_run(const LoaderConfig *cfg)
         }
         ss_loaded();
     }
+    /* The file service's hooks only when some plugin serves files: with none, the game's file calls
+       stay untouched. Before the lock, so they take their place in the chains like any hook. */
+    if (fs_active() && cfg->install_game_hooks)
+        log_line("loader", "file hooks: %d of 7 installed", fs_win32_install() + fs_game_install(g_game.delta));
+    else if (fs_active() && cfg->install_file_hooks)
+        log_line("loader", "file hooks: %d of 6 installed", fs_win32_install());
     /* The loader's menu hooks come after every plugin's, so they head their chains and no plugin can
        take the Plugins panel away (design section 8). */
     int frame_hook = 0;
@@ -333,6 +360,7 @@ int loader_run(const LoaderConfig *cfg)
     hm_lock();
     ev_fire(RON_EV_PRE_INIT, NULL);
     ev_lock();
+    fs_lock();
     log_line("loader", "%d of %d plugins loaded", loaded, n);
     return loaded;
 }

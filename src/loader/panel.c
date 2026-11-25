@@ -4,6 +4,12 @@
 #include "loader/panel.h"
 #include "loader/order.h"
 
+void panel_set_files(Panel *p, const int *files)
+{
+    for (int i = 0; i < p->n && files; i++)
+        p->rows[i].files = files[i];
+}
+
 void panel_init(Panel *p, const LoaderPlugin *plugins, int n, const int *hooks, int safe_start)
 {
     memset(p, 0, sizeof *p);
@@ -162,7 +168,7 @@ int panel_description(const Panel *p, PanelLine out[PANEL_DESC_LINES], int wrap_
     if (WideCharToMultiByte(CP_UTF8, 0, r->id, -1, file, sizeof file, NULL, NULL) <= 0)
         file[0] = 0;
     line(&out[n++], PANEL_TONE_DIM, "File: %s.dll%s", file, "");
-    char hooks[48];
+    char hooks[80];
     if (r->failed)
         line(&out[n++], PANEL_TONE_BAD, "Failed: %s%s", r->reason, "");
     else if (!r->enabled)
@@ -176,7 +182,20 @@ int panel_description(const Panel *p, PanelLine out[PANEL_DESC_LINES], int wrap_
             snprintf(hooks, sizeof hooks, "Hooks 1 game function.");
         else
             snprintf(hooks, sizeof hooks, "Hooks %d game functions.", r->hooks);
+        size_t hl = strlen(hooks);
+        if (r->files == 1)
+            snprintf(hooks + hl - 1, sizeof hooks - hl + 1, ", serves 1 file.");
+        else if (r->files > 1)
+            snprintf(hooks + hl - 1, sizeof hooks - hl + 1, ", serves %d files.", r->files);
         line(&out[n++], PANEL_TONE_DIM, "%s%s", hooks, "");
+    }
+    /* every line fits the box: a narrow menu column (a mod's restyled menu) cuts a long one with
+       "..." (the description's two lines are already wrapped to the width) */
+    for (int i = 0; i < n && wrap_chars > 3; i++) {
+        if (chars_of(out[i].text) > wrap_chars) {
+            size_t cut = take(out[i].text, wrap_chars - 3, sizeof out[i].text - 4);
+            memcpy(out[i].text + cut, "...", 4);
+        }
     }
     return n;
 }

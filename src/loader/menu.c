@@ -15,6 +15,7 @@
 #include "loader/menu_draw.h"
 #include "loader/game.h"
 #include "loader/hooks.h"
+#include "loader/files.h"
 #include "loader/loader.h"
 #include "loader/log.h"
 #include "loader/menufile.h"
@@ -133,12 +134,15 @@ static void *THISCALL d_menu_file(void *out)
 
 static void open_panel(void)
 {
-    static int hooks[ORDER_MAX];
+    static int hooks[ORDER_MAX], files[ORDER_MAX];
     int n = 0;
     const LoaderPlugin *pl = loader_plugins(&n);
-    for (int i = 0; i < n; i++)
+    for (int i = 0; i < n; i++) {
         hooks[i] = hm_owner_count(i + 1);
+        files[i] = fs_owner_files(i + 1);
+    }
     panel_init(&g_panel, pl, n, hooks, loader_safe_start());
+    panel_set_files(&g_panel, files);
 }
 
 /* TopMenu::check_result(String const &button): thiscall, ret 4; -1 stays in the panel (ledger menu F4). */

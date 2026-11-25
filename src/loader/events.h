@@ -24,8 +24,11 @@ void ev_reset(void);
    match was built (the game also calls Game::close to clear before a match, and twice at its end). */
 void ev_match_built(void *setup);
 void ev_game_closed(void *game);
+/* A library the game loaded (d3dgl.dll, dssl.dll): RON_EV_LIBRARY once per module, with the hook
+   manager open for addresses inside it while the callbacks run. */
+void ev_library_loaded(void *module);
 
-/* Installs the loader's own (owner 0) hooks on the six game functions; returns how many succeeded.
+/* Installs the loader's own (owner 0) hooks on the eight game functions and call sites; returns how many succeeded.
    A failed hook is logged and leaves its event silent. */
 int ev_install_game_hooks(uintptr_t delta);
 int ev_installed(RonEvent ev);  /* 1 when that event's game hook took */

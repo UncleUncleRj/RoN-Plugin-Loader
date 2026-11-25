@@ -23,7 +23,7 @@
 typedef struct PanelRow {
     wchar_t id[64];
     char name[64], version[32], author[64], description[256], reason[128];
-    int enabled, is_new, failed, loaded, hooks;
+    int enabled, is_new, failed, loaded, hooks, files;
 } PanelRow;
 
 typedef struct Panel {
@@ -45,6 +45,7 @@ typedef struct PanelSlot {
 } PanelSlot;
 
 void panel_init(Panel *p, const LoaderPlugin *plugins, int n, const int *hooks, int safe_start);
+void panel_set_files(Panel *p, const int *files);  /* how many files each row's plugin serves */
 void panel_select(Panel *p, int row);           /* -1 clears */
 void panel_toggle(Panel *p, int row);
 int panel_move(Panel *p, int delta);            /* the selected row, -1 up / +1 down; 1 if it moved */
