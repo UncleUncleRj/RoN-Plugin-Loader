@@ -87,7 +87,7 @@ TEST(panel_description_lines)
     Panel *p = three();
     PanelLine l[PANEL_DESC_LINES];
     panel_select(p, 0);
-    CHECK_EQ(panel_description(p, l), 6);
+    CHECK_EQ(panel_description(p, l, PANEL_WRAP), 6);
     CHECK_STR(l[0].text, "A");
     CHECK_EQ(l[0].tone, PANEL_TONE_TEXT);
     CHECK_STR(l[1].text, "Version 1.0, by Ann");
@@ -109,7 +109,7 @@ TEST(panel_description_wraps_utf8)
     strcpy(p->rows[0].description, desc);
     panel_select(p, 0);
     PanelLine l[PANEL_DESC_LINES];
-    CHECK_EQ(panel_description(p, l), 6);
+    CHECK_EQ(panel_description(p, l, PANEL_WRAP), 6);
     for (int i = 2; i <= 3; i++) {
         wchar_t w[128];
         CHECK(MultiByteToWideChar(CP_UTF8, MB_ERR_INVALID_CHARS, l[i].text, -1, w, 128) > 0);
@@ -123,26 +123,26 @@ TEST(panel_description_status)
     Panel *p = three();
     PanelLine l[PANEL_DESC_LINES];
     panel_select(p, 1);
-    int n = panel_description(p, l);
+    int n = panel_description(p, l, PANEL_WRAP);
     CHECK_EQ(n, 4);
     CHECK_STR(l[1].text, "Version 1.0");
     CHECK_STR(l[2].text, "File: B.dll");
     CHECK_STR(l[3].text, "Turned off.");
     CHECK_EQ(l[3].tone, PANEL_TONE_DIM);
     panel_select(p, 2);
-    n = panel_description(p, l);
+    n = panel_description(p, l, PANEL_WRAP);
     CHECK_STR(l[n - 1].text, "Failed: LoadLibrary error 193");
     CHECK_EQ(l[n - 1].tone, PANEL_TONE_BAD);
     panel_select(p, 0);
     p->rows[0].hooks = 1;
-    n = panel_description(p, l);
+    n = panel_description(p, l, PANEL_WRAP);
     CHECK_STR(l[n - 1].text, "Hooks 1 game function.");
     p->rows[0].hooks = 0;
-    n = panel_description(p, l);
+    n = panel_description(p, l, PANEL_WRAP);
     CHECK_STR(l[n - 1].text, "Hooks no game functions.");
     p->safe_start = 1;
     p->rows[0].loaded = 0;
-    n = panel_description(p, l);
+    n = panel_description(p, l, PANEL_WRAP);
     CHECK_STR(l[n - 1].text, "Not loaded in this start.");
 }
 
@@ -151,11 +151,11 @@ TEST(panel_description_without_selection)
     Panel *p = three();
     PanelLine l[PANEL_DESC_LINES];
     panel_select(p, -1);
-    CHECK_EQ(panel_description(p, l), 1);
+    CHECK_EQ(panel_description(p, l, PANEL_WRAP), 1);
     CHECK_STR(l[0].text, "Click a plugin to see its description.");
     CHECK_EQ(l[0].tone, PANEL_TONE_DIM);
     panel_init(&g_p, g_pl, 0, g_hooks, 0);
-    CHECK_EQ(panel_description(&g_p, l), 0);
+    CHECK_EQ(panel_description(&g_p, l, PANEL_WRAP), 0);
 }
 
 TEST(panel_description_file_name_utf8)
@@ -165,7 +165,7 @@ TEST(panel_description_file_name_utf8)
     panel_init(&g_p, g_pl, 1, g_hooks, 0);
     panel_select(&g_p, 0);
     PanelLine l[PANEL_DESC_LINES];
-    int n = panel_description(&g_p, l);
+    int n = panel_description(&g_p, l, PANEL_WRAP);
     CHECK(n >= 3);
     CHECK_STR(l[n - 2].text, "File: \xC3\x9C" "ber.dll");
 }
@@ -335,4 +335,17 @@ TEST(panel_more_counts)
     panel_more(p, 156, &above, &below);
     CHECK_EQ(above, 0);
     CHECK_EQ(below, 0);
+}
+
+/* A narrow Description box (a mod's narrower menu) wraps at its own width. */
+TEST(panel_description_wraps_to_width)
+{
+    Panel *p = three();
+    panel_select(p, 0);
+    PanelLine l[PANEL_DESC_LINES];
+    CHECK_EQ(panel_description(p, l, 30), 6);
+    CHECK(strlen(l[2].text) <= 30);
+    CHECK(strlen(l[3].text) <= 30);
+    size_t n = strlen(l[3].text);
+    CHECK(n >= 3 && strcmp(l[3].text + n - 3, "...") == 0);
 }

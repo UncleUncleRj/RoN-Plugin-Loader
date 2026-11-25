@@ -49,7 +49,9 @@ void panel_select(Panel *p, int row);           /* -1 clears */
 void panel_toggle(Panel *p, int row);
 int panel_move(Panel *p, int delta);            /* the selected row, -1 up / +1 down; 1 if it moved */
 int panel_changed(const Panel *p);
-int panel_description(const Panel *p, PanelLine out[PANEL_DESC_LINES]);  /* the selected row's, or a hint; the line count */
+/* The selected row's lines, or a hint; the line count. wrap: characters per description line
+   (PANEL_WRAP at most; the box's width decides). */
+int panel_description(const Panel *p, PanelLine out[PANEL_DESC_LINES], int wrap);
 int panel_layout(const Panel *p, int list_h, PanelSlot *out, int max);  /* visible rows only */
 int panel_hit(const Panel *p, int list_h, int x, int y, int *on_box);   /* row or -1 */
 void panel_scroll(Panel *p, int list_h, int notches);                   /* positive = toward row 0 */

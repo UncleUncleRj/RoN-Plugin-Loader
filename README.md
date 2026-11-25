@@ -45,7 +45,9 @@ folder; both scripts take `-GameDir <path>`. While installed, the loader writes
 
 ## The Plugins panel
 
-Main menu, **Tools & Extras → Plugins** (directly under Steam Workshop). The **Load Order** list
+Main menu, **Tools & Extras → Plugins** (directly under Steam Workshop). The button and the panel
+copy the look of the Tools & Extras panel they join (window, textures, button size and spacing), so
+a mod that restyles the menu keeps its style. The **Load Order** list
 shows every plugin with its number, check box, name, version and a "new" or "failed" tag; the
 **Description** box shows the selected one's version, author, description, file and status. Move Up
 and Move Down change the order, the check box turns a plugin on or off, and **Apply and Restart**

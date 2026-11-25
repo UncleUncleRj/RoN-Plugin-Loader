@@ -95,18 +95,22 @@ static int chars_of(const char *s)
     return c;
 }
 
-/* The description in at most 2 lines of PANEL_WRAP characters, "..." when it is cut. */
-static int wrap(const char *s, char lines[][128])
+/* The description in at most 2 lines of `width` characters, "..." when it is cut. */
+static int wrap(const char *s, char lines[][128], int width)
 {
+    if (width > PANEL_WRAP)
+        width = PANEL_WRAP;
+    if (width < 10)
+        width = 10;
     while (*s == ' ')
         s++;
     if (!*s)
         return 0;
-    if (chars_of(s) <= PANEL_WRAP && strlen(s) < 128) {
+    if (chars_of(s) <= width && strlen(s) < 128) {
         snprintf(lines[0], 128, "%s", s);
         return 1;
     }
-    size_t cut = take(s, PANEL_WRAP, 124);
+    size_t cut = take(s, width, 124);
     size_t end = cut;
     while (end > 0 && s[end] != ' ')
         end--;
@@ -117,10 +121,10 @@ static int wrap(const char *s, char lines[][128])
     s += end;
     while (*s == ' ')
         s++;
-    if (chars_of(s) <= PANEL_WRAP && strlen(s) < 128) {
+    if (chars_of(s) <= width && strlen(s) < 128) {
         snprintf(lines[1], 128, "%s", s);
     } else {
-        size_t b = take(s, PANEL_WRAP - 3, 121);
+        size_t b = take(s, width - 3, 121);
         memcpy(lines[1], s, b);
         memcpy(lines[1] + b, "...", 4);
     }
@@ -133,7 +137,7 @@ static void line(PanelLine *l, int tone, const char *fmt, const char *a, const c
     l->tone = tone;
 }
 
-int panel_description(const Panel *p, PanelLine out[PANEL_DESC_LINES])
+int panel_description(const Panel *p, PanelLine out[PANEL_DESC_LINES], int wrap_chars)
 {
     if (p->n <= 0)
         return 0;
@@ -151,7 +155,7 @@ int panel_description(const Panel *p, PanelLine out[PANEL_DESC_LINES])
     else if (r->author[0])
         line(&out[n++], PANEL_TONE_DIM, "By %s%s", r->author, "");
     char d[2][128];
-    int k = wrap(r->description, d);
+    int k = wrap(r->description, d, wrap_chars);
     for (int i = 0; i < k; i++)
         line(&out[n++], PANEL_TONE_TEXT, "%s%s", d[i], "");
     char file[100];
