@@ -1,6 +1,6 @@
-# Developer install: copies the built bootstrap, loader and HelloPlugin into a game folder, and
-# records every path it creates in <game>\plugins\.dev-installed.txt so dev-uninstall.ps1 can remove
-# exactly those. Refuses when shfolder.dll or RonPluginLoader.dll is already there without that record.
+# Developer install: copies the built loader (shfolder.dll, one file) and HelloPlugin into a game
+# folder, and records every path it creates in <game>\plugins\.dev-installed.txt so dev-uninstall.ps1
+# can remove exactly those. Refuses when a shfolder.dll is already there without that record.
 param([string]$GameDir = 'C:\Program Files (x86)\Steam\steamapps\common\Rise of Nations')
 $ErrorActionPreference = 'Stop'
 $root = Split-Path $PSScriptRoot -Parent
@@ -13,11 +13,9 @@ if (-not (Test-Path (Join-Path $GameDir 'riseofnations.exe'))) {
     exit 1
 }
 $hasRecord = Test-Path $record
-foreach ($f in 'shfolder.dll', 'RonPluginLoader.dll') {
-    if ((Test-Path (Join-Path $GameDir $f)) -and -not $hasRecord) {
-        Write-Output "refusing: $f is already in $GameDir and dev-install did not put it there"
-        exit 1
-    }
+if ((Test-Path (Join-Path $GameDir 'shfolder.dll')) -and -not $hasRecord) {
+    Write-Output "refusing: shfolder.dll is already in $GameDir and dev-install did not put it there"
+    exit 1
 }
 
 $created = [System.Collections.Generic.List[string]]::new()
@@ -30,7 +28,6 @@ if (-not (Test-Path $plugins)) {
 }
 $copies = @(
     @((Join-Path $build 'shfolder.dll'), (Join-Path $GameDir 'shfolder.dll')),
-    @((Join-Path $build 'RonPluginLoader.dll'), (Join-Path $GameDir 'RonPluginLoader.dll')),
     @((Join-Path $build 'plugins\HelloPlugin.dll'), (Join-Path $plugins 'HelloPlugin.dll')),
     @((Join-Path $build 'plugins\HelloPlugin.ini'), (Join-Path $plugins 'HelloPlugin.ini'))
 )

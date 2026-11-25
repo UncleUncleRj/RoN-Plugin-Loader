@@ -40,7 +40,7 @@ Non-goals
   `mods\` folders and Steam Workshop items) keeps loading those. Every plugin is a DLL. A plugin
   with no files of its own, such as a developer-tools DLL that changes the game's data in code, is
   an ordinary plugin: a DLL and its ini, with no `Folder` (user, 2026-11-24).
-- Plugins for the launcher (`patriots.exe`): the bootstrap does not load there.
+- Plugins for the launcher (`patriots.exe`): the loader does not run there.
 - Distributing DLLs through the Steam Workshop.
 
 Anti-goals (failure even if everything technically works)
@@ -57,7 +57,8 @@ Anti-goals (failure even if everything technically works)
 
 | Approach | Verdict |
 |---|---|
-| **A separate loader DLL, started by a `shfolder.dll` stand-in; plugins are DLLs in `<game>\plugins\`** | **Chosen.** Independent of any one mod; loads at process start; immune to the Windows compatibility layers that defeat the current `winmm.dll` method |
+| **A loader DLL of its own, one file named `shfolder.dll` (a stand-in for the system file); plugins are DLLs in `<game>\plugins\`** | **Chosen.** Independent of any one mod; loads at process start; immune to the Windows compatibility layers that defeat the current `winmm.dll` method |
+| A small `shfolder.dll` stand-in that loads a separate `RonPluginLoader.dll` | Built first, then merged into one file (user decision, 2026-11-24): one file to install, and no starter and loader of different versions. Cost: the loader must carry a system file's name, and a new start route later (a game update that drops the import, or the launcher) means building the whole loader under another name instead of swapping a small starter |
 | Build the loader into RON Revived's DLL | Rejected: other modders could not use plugins without the whole RON Revived mod, and a bug in either takes down both |
 | An outside launcher that starts the game and injects the DLLs | Rejected: players would have to start through it instead of Steam's Play button, and DLL injection is what antivirus watches for. It stays a fallback route for `patriots.exe` only |
 | Register each plugin's folder as one of the game's own mods (`ModManager`) | Rejected: the plugins would be written into `mods\mod-status.txt`, appear on the Workshop screen and in the multiplayer mod list, and follow the game's drop-down-mod rules |
@@ -68,16 +69,16 @@ manager); **the panel in the main-menu column was chosen** (section 8).
 
 ## 4. Pieces
 
-1. **Bootstrap**: `shfolder.dll` in the game folder. The game's network library
-   `CrossplayNetLib.dll`, which the exe imports statically, imports `shfolder.dll`, so ours loads
-   at process start, before Steam and before the crossplay threads start. It exports only
+1. **`shfolder.dll`**, the loader's only file (user decision, 2026-11-24), in the game folder. The
+   game's network library `CrossplayNetLib.dll`, which the exe imports statically, imports
+   `shfolder.dll`, so ours loads at process start, before Steam and before the crossplay threads start. It exports only
    `SHGetFolderPathA` and `SHGetFolderPathW`, forwarded to `shell32` through a `.def` (the system
    `shfolder.dll` is a thin wrapper around the same two shell32 functions). Measured: it loads
    even when an AppCompat layer makes the System32 `winmm.dll` win. `DllMain` only checks the
-   exe, warms up bcrypt (below) and patches a `jmp` at `Main::main`; that hook loads the loader
-   DLL. Nothing else runs under the loader lock (corrected 2026-11-24: the first draft had
-   `DllMain` load the loader DLL, which would call `LoadLibrary` under the loader lock).
-2. **Loader**: `RonPluginLoader.dll` (name: builder's call) in the game folder. All work runs on
+   exe, warms up bcrypt (below) and patches a `jmp` at `Main::main`; the loader runs from that
+   hook. Nothing else runs under the loader lock (corrected 2026-11-24: the first draft had
+   `DllMain` load the loader, which would call `LoadLibrary` under the loader lock).
+2. **Loader**: built into the same `shfolder.dll`, which exports nothing else. All work runs on
    the game's main thread from a hook at the entry of `Main::main` (`0x560CF0`), which runs
    before `Main::init` (Steam, at `+0x24`), the game's mod scan (`+0x29`) and any data load. A
    loader-lock-free start, and early enough that plugins can register files before the game
@@ -85,7 +86,7 @@ manager); **the panel in the main-menu column was chosen** (section 8).
 3. **Plugins**: ordinary 32-bit DLLs with one C export. Any compiler works.
 
 The bcrypt warm-up that RON Revived does in its `DllMain` today (a start-up deadlock fix) moves
-into the bootstrap: it must still happen before `PartyInitialize` (`Main::init+0x81`).
+into `shfolder.dll`'s `DllMain`: it must still happen before `PartyInitialize` (`Main::init+0x81`).
 
 ## 5. Plugins on disk and the load order
 
@@ -335,7 +336,8 @@ multiplayer features; agree with them on the channel below so both use one.
 ## 11. First version and later
 
 First version
-1. Bootstrap (`shfolder.dll`) and loader at `Main::main`; `load-order.txt`; the plugin `.ini` files.
+1. The loader (`shfolder.dll`, one file), started at `Main::main`; `load-order.txt`; the plugin
+   `.ini` files.
 2. API v1: log, game identity, symbol lookup, events, hooks with chaining.
 3. File service: use, folder, generate; the `CreateFileW`/`FindFirstFileExW` fallback where needed.
 4. Plugins panel (on/off, order, details, "new"/"failed" tags, apply and restart).
@@ -346,9 +348,10 @@ First version
 Release (user decision, 2026-11-24): the loader first reaches players with the next RON Revived
 version, in which RON Revived is itself a plugin (that move is its own project in the mod's
 repository: hooks onto the shared hook manager, `override.c` replaced by the file service, the
-`winmm.dll` proxy retired). RON Revived's install script installs the bootstrap and the loader when
-it doesn't find them, or finds an older version (my call: "older" too), and tells players to
-uninstall old RON Revived versions.
+`winmm.dll` proxy retired). RON Revived's install script installs the loader (`shfolder.dll`) when
+it doesn't find it, or finds an older version (my call: "older" too), and tells players to
+uninstall old RON Revived versions. A file name can't tell ours from another mod's `shfolder.dll`,
+so the script needs a mark inside the file, such as a version resource (still to add).
 
 Later
 - Declared rules (`Requires`, `LoadAfter`, `Incompatible`), warnings on the panel and a "sort
