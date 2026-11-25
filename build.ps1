@@ -66,7 +66,7 @@ if ($Test) {
     Get-ChildItem $tp2 -Exclude '*.dll' | Remove-Item -Force
     Copy-Item (Join-Path $root 'tests\plugins\LateHook.ini'), (Join-Path $root 'tests\plugins\CppGood.ini') $tp2
 
-    $src = @(Get-Sources @('tests\*.c', 'src\common\*.c', 'src\loader\*.c', 'src\bootstrap\decide.c'))
+    $src = @(Get-Sources @('tests\*.c', 'src\common\*.c', 'src\loader\*.c', 'src\bootstrap\decide.c', 'src\bootstrap\start.c'))
     $exe = Join-Path $build 'tests.exe'
     Invoke-CC 'tests.exe' (@('-o', $exe) + $src + @('-lkernel32', '-luser32', '-lbcrypt'))
     & $exe

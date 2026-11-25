@@ -82,7 +82,12 @@ manager); **the panel in the main-menu column was chosen** (section 8).
    the game's main thread from a hook at the entry of `Main::main` (`0x560CF0`), which runs
    before `Main::init` (Steam, at `+0x24`), the game's mod scan (`+0x29`) and any data load. A
    loader-lock-free start, and early enough that plugins can register files before the game
-   reads any.
+   reads any. The hook is a stub in assembly that keeps every register, the flags and the stack:
+   `WinMain` passes the program's `HINSTANCE` to `Main::main` in `ECX` (`0x5609CD`; stored at
+   `0x560D11`), not on the stack as the decorated name says. The first build used a C detour,
+   which changed `ECX`; the game then kept `HINSTANCE` 0, `d3dgl.dll` (which loads the cursors
+   from the exe's resources with it, `graphsys+0x170`) had no cursor, and the mouse pointer was
+   invisible in the menus (found by the user, 2026-11-24; fixed with the stub and a test).
 3. **Plugins**: ordinary 32-bit DLLs with one C export. Any compiler works.
 
 The bcrypt warm-up that RON Revived does in its `DllMain` today (a start-up deadlock fix) moves
@@ -163,7 +168,7 @@ function pointers (no C++ ABI across the boundary). Version 1 provides:
 | `post_init` | after `Main::init_menus` (`0x595BE0`) | Renderer, sound and menus are up |
 | `match_built` | after `Setup::build_game` (`0x5AC190`) | Map, empires and scenario script ready |
 | `sim_frame` | the only call of `Game::do_frame` (`0x591EF0`), at `Game::loop+0x14E` (`0x5916BE`) | One simulation frame (1/15 s of game time). A call-site hook, so a tool that hooks `do_frame`'s entry (a Frida agent does) doesn't silence it |
-| `render_frame` | `Game::loop_render` (`0x5917E0`) | Once per drawn picture |
+| `render_frame` | `Game::loop_render` (`0x5917E0`) | Once per drawn picture of a match, from its loading screen on. Not in the menus: in 12 s on the main menu it never fired (2026-11-24) |
 | `match_end` | `Game::close` (`0x594B80`) | Once per match: the first `Game::close` after `match_built`. The game also calls `Game::close` to clear before it builds a match, and twice when a match ends (`Game::run`) |
 | `shutdown` | the return of `Main::run_game_loop`, called once at `Main::main+0x913` (`0x561603`) | `Main::shutdown` (`0x5966A0`) is not reached on a console quit: a trace showed the process ending inside `SteamAuthentication` (Get, CancelSteamAuthTicket) first, in a run with Steam kept out |
 
