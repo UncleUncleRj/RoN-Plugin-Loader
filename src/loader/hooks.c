@@ -40,28 +40,46 @@ static void notify(int owner, int other, uintptr_t at, int kind)
         g_notify(owner, other, at, kind);
 }
 
-static void write_mem(uintptr_t at, const void *data, uint32_t n)
+/* Committed, readable memory over the whole range (a plugin's wrong address fails that one request). */
+static int readable(uintptr_t at, uint32_t n)
+{
+    uintptr_t p = at, end = at + n;
+    if (at < 0x10000 || end < at)
+        return 0;
+    while (p < end) {
+        MEMORY_BASIC_INFORMATION mi;
+        if (VirtualQuery((const void *)p, &mi, sizeof mi) != sizeof mi || mi.State != MEM_COMMIT ||
+            (mi.Protect & (PAGE_NOACCESS | PAGE_GUARD)) || mi.Protect == 0)
+            return 0;
+        p = (uintptr_t)mi.BaseAddress + mi.RegionSize;
+    }
+    return 1;
+}
+
+static int write_mem(uintptr_t at, const void *data, uint32_t n)
 {
     DWORD old;
-    VirtualProtect((void *)at, n, PAGE_EXECUTE_READWRITE, &old);
+    if (!VirtualProtect((void *)at, n, PAGE_EXECUTE_READWRITE, &old))
+        return 0;
     memcpy((void *)at, data, n);
     VirtualProtect((void *)at, n, old, &old);
     FlushInstructionCache(GetCurrentProcess(), (void *)at, n);
+    return 1;
 }
 
-static void write_jmp(uintptr_t at, void *to)
+static int write_jmp(uintptr_t at, void *to)
 {
     uint8_t j[5];
     j[0] = 0xE9;
     int32_t rel = (int32_t)((uintptr_t)to - (at + 5));
     memcpy(j + 1, &rel, 4);
-    write_mem(at, j, 5);
+    return write_mem(at, j, 5);
 }
 
-static void write_rel32(uintptr_t site, void *to)
+static int write_rel32(uintptr_t site, void *to)
 {
     int32_t rel = (int32_t)((uintptr_t)to - (site + 5));
-    write_mem(site + 1, &rel, 4);
+    return write_mem(site + 1, &rel, 4);
 }
 
 static uint8_t *pool_alloc(uint32_t n)
@@ -130,15 +148,16 @@ static void *head(const Record *r)
 }
 
 /* Points the patched site at the current head of its chain. */
-static void apply_head(Record *r)
+static int apply_head(Record *r)
 {
     void *to = head(r);
     if (r->kind == K_INLINE)
-        write_jmp(r->at, to);
-    else if (r->kind == K_CALL)
-        write_rel32(r->at, to);
-    else if (r->kind == K_PTR)
-        write_mem(r->at, &to, 4);
+        return write_jmp(r->at, to);
+    if (r->kind == K_CALL)
+        return write_rel32(r->at, to);
+    if (r->kind == K_PTR)
+        return write_mem(r->at, &to, 4);
+    return 1;
 }
 
 static RonResult add_link(Record *r, int owner, void *detour, void **orig)
@@ -147,11 +166,17 @@ static RonResult add_link(Record *r, int owner, void *detour, void **orig)
         return RON_E_MEM;
     if (r->nlinks)
         notify(owner, last_owner(r), r->at, HM_SHARED);
-    *orig = head(r);
+    void *prev = head(r);
     r->links[r->nlinks].owner = owner;
     r->links[r->nlinks].detour = detour;
     r->nlinks++;
-    apply_head(r);
+    *orig = prev;  /* before the site points at the detour, so the detour can call on at once */
+    if (!apply_head(r)) {
+        r->nlinks--;
+        if (r->nlinks == 0)
+            r->used = 0;  /* nothing was written: the bytes are still the stock ones */
+        return RON_E_MEM;
+    }
     return RON_OK;
 }
 
@@ -168,12 +193,29 @@ RonResult hm_inline(int owner, uintptr_t at, const uint8_t *sig, const uint8_t *
         return RON_E_STATE;
     if (!at || !sig || !detour || !orig || stolen < 5 || stolen > sig_len || sig_len > MAX_BYTES)
         return RON_E_ARG;
+    if (!readable(at, sig_len))
+        return RON_E_ARG;
     Record *r = find_at(at);
     if (r) {
-        if (r->kind != K_INLINE || sig_len > r->stock_len)
+        if (r->kind != K_INLINE)
             return conflict(owner, r, at);
-        if (!sig_matches(r->stock, sig, mask, sig_len))
+        if (sig_len > r->stock_len) {
+            /* A longer signature than the first hook's: the extra bytes lie past every byte this
+               record changed, so memory still holds the game's own; nobody else may have changed them. */
+            uint32_t extra = sig_len - r->stock_len;
+            Record *o = find_overlap(at + r->stock_len, extra, r);
+            if (o)
+                return conflict(owner, o, at);
+            uint8_t full[MAX_BYTES];
+            memcpy(full, r->stock, r->stock_len);
+            memcpy(full + r->stock_len, (const void *)(at + r->stock_len), extra);
+            if (!sig_matches(full, sig, mask, sig_len))
+                return RON_E_SIG;
+            memcpy(r->stock, full, sig_len);
+            r->stock_len = sig_len;
+        } else if (!sig_matches(r->stock, sig, mask, sig_len)) {
             return RON_E_SIG;
+        }
         return add_link(r, owner, detour, orig);
     }
     Record *o = find_overlap(at, stolen, NULL);
@@ -205,7 +247,7 @@ RonResult hm_call(int owner, uintptr_t site, void *detour, void **orig)
 {
     if (g_locked)
         return RON_E_STATE;
-    if (!site || !detour || !orig)
+    if (!site || !detour || !orig || !readable(site, 5))
         return RON_E_ARG;
     Record *r = find_at(site);
     if (r) {
@@ -236,7 +278,7 @@ RonResult hm_ptr(int owner, uintptr_t slot, uintptr_t expected, void *detour, vo
 {
     if (g_locked)
         return RON_E_STATE;
-    if (!slot || !detour || !orig)
+    if (!slot || !detour || !orig || !readable(slot, 4))
         return RON_E_ARG;
     Record *r = find_at(slot);
     if (r) {
@@ -268,7 +310,7 @@ RonResult hm_patch(int owner, uintptr_t at, const uint8_t *expect, const uint8_t
 {
     if (g_locked)
         return RON_E_STATE;
-    if (!at || !expect || !bytes || len == 0 || len > MAX_BYTES)
+    if (!at || !expect || !bytes || len == 0 || len > MAX_BYTES || !readable(at, len))
         return RON_E_ARG;
     Record *o = find_overlap(at, len, NULL);
     if (o)
@@ -283,7 +325,10 @@ RonResult hm_patch(int owner, uintptr_t at, const uint8_t *expect, const uint8_t
     r->len = r->stock_len = len;
     memcpy(r->stock, (const void *)at, len);
     r->creator = owner;
-    write_mem(at, bytes, len);
+    if (!write_mem(at, bytes, len)) {
+        r->used = 0;
+        return RON_E_MEM;
+    }
     return RON_OK;
 }
 

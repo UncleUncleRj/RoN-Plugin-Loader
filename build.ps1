@@ -58,6 +58,17 @@ if ($Test) {
     [IO.File]::WriteAllBytes((Join-Path $tp 'Garbage.dll'), $junk)
     New-Item -ItemType Directory -Force (Join-Path $tp 'GoodFiles') | Out-Null
 
+    # build\testgame2\plugins: a C++ plugin and one that hooks too late (separate, so the counts above stay)
+    $testgame2 = Join-Path $build 'testgame2'
+    if (Test-Path $testgame2) { Remove-Item -Recurse -Force $testgame2 }
+    $tp2 = Join-Path $testgame2 'plugins'
+    New-Item -ItemType Directory -Force $tp2 | Out-Null
+    Invoke-CC 'LateHook.dll' @('-shared', '-o', (Join-Path $tp2 'LateHook.dll'), (Join-Path $root 'tests\plugins\LateHook.c'), '-lkernel32')
+    & python -m ziglang c++ -target x86-windows-gnu -O2 -shared -I (Join-Path $root 'include') -o (Join-Path $tp2 'CppGood.dll') (Join-Path $root 'tests\plugins\CppGood.cpp')
+    if ($LASTEXITCODE) { throw 'build failed: CppGood.dll' }
+    Get-ChildItem $tp2 -Exclude '*.dll' | Remove-Item -Force
+    Copy-Item (Join-Path $root 'tests\plugins\LateHook.ini'), (Join-Path $root 'tests\plugins\CppGood.ini') $tp2
+
     $src = @(Get-Sources @('tests\*.c', 'src\common\*.c', 'src\loader\*.c', 'src\bootstrap\decide.c'))
     $exe = Join-Path $build 'tests.exe'
     Invoke-CC 'tests.exe' (@('-o', $exe) + $src + @('-lkernel32', '-luser32', '-lbcrypt'))

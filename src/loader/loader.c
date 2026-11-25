@@ -176,6 +176,7 @@ static int load_plugin(int i)
     char reason[96];
     wchar_t dll[MAX_PATH];
     _snwprintf(dll, MAX_PATH, L"%ls\\%ls.dll", g_plugins_dir, p->id);
+    log_line("loader", "loading %s", p->m.name);  /* so a crash inside the plugin points at it */
     HMODULE mod = LoadLibraryExW(dll, NULL, LOAD_WITH_ALTERED_SEARCH_PATH);
     if (!mod) {
         snprintf(reason, sizeof reason, "LoadLibrary error %lu", GetLastError());
@@ -260,8 +261,10 @@ int loader_run(const LoaderConfig *cfg)
         if (g_plugins[i].enabled && !g_plugins[i].reason[0] && g_plugins[i].state != LP_DISABLED)
             loaded += load_plugin(i);
     }
-    ev_fire(RON_EV_PRE_INIT, NULL);
+    /* Hooks only inside RonPluginMain: a hook made from pre_init would land on top of every chain and
+       run before lower plugins' hooks. Event registration stays open through pre_init. */
     hm_lock();
+    ev_fire(RON_EV_PRE_INIT, NULL);
     ev_lock();
     log_line("loader", "%d of %d plugins loaded", loaded, n);
     return loaded;

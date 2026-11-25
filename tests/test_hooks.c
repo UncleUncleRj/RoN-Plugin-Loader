@@ -183,3 +183,35 @@ TEST(locked_refuses)
     CHECK_EQ(hk_add1(1), 2);
     hm_reset();
 }
+
+/* A plugin may chain onto a function another owner hooked with a shorter signature: the extra bytes
+   are checked against memory (they are still the game's own) and kept as stock. */
+TEST(inline_chain_longer_signature)
+{
+    start();
+    CHECK_EQ(hm_inline(1, (uintptr_t)hk_add1, k_stock, NULL, 6, 6, (void *)d1, (void **)&o1), RON_OK);
+    CHECK_EQ(hm_inline(2, (uintptr_t)hk_add1, k_stock, NULL, 11, 6, (void *)d2, (void **)&o2), RON_OK);
+    CHECK_EQ(hk_add1(1), 120);
+    hm_rollback_owner(2);
+    uint8_t bad[11];
+    memcpy(bad, k_stock, sizeof bad);
+    bad[9] = 0x90;  /* wrong in the extra tail */
+    CHECK_EQ(hm_inline(2, (uintptr_t)hk_add1, bad, NULL, 11, 6, (void *)d2, (void **)&o2), RON_E_SIG);
+    hm_reset();
+    CHECK(memcmp((void *)hk_add1, k_stock, sizeof k_stock) == 0);
+}
+
+/* An address that is not committed, readable memory fails that one request, never the process. */
+TEST(bad_address_refused)
+{
+    start();
+    uint8_t *reserved = VirtualAlloc(NULL, 4096, MEM_RESERVE, PAGE_NOACCESS);
+    CHECK(reserved != NULL);
+    const uint8_t two[2] = {0x90, 0x90};
+    CHECK_EQ(hm_inline(1, (uintptr_t)reserved, k_stock, NULL, 11, 6, (void *)d1, (void **)&o1), RON_E_ARG);
+    CHECK_EQ(hm_call(1, (uintptr_t)reserved, (void *)cd1, (void **)&c1), RON_E_ARG);
+    CHECK_EQ(hm_ptr(1, (uintptr_t)reserved, 0, (void *)pd1, (void **)&p1), RON_E_ARG);
+    CHECK_EQ(hm_patch(1, (uintptr_t)reserved, two, two, 2), RON_E_ARG);
+    CHECK_EQ(hm_inline(1, 0x10, k_stock, NULL, 11, 6, (void *)d1, (void **)&o1), RON_E_ARG);
+    VirtualFree(reserved, 0, MEM_RELEASE);
+}

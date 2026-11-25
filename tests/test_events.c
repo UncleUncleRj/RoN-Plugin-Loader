@@ -132,3 +132,27 @@ TEST(match_end_once_per_match)
     CHECK_EQ(g_ended, 2);
     ev_reset();
 }
+
+static const char *g_dummy;
+static void cb_sim(RonEvent ev, void *obj, void *user) { (void)ev; (void)obj; (void)user; }
+static void cb_a_registers(RonEvent ev, void *obj, void *user)
+{
+    (void)ev;
+    (void)obj;
+    (void)user;
+    g_seq[g_nseq++] = 'a';
+    ev_register(1, RON_EV_SIM_FRAME, cb_sim, NULL);  /* inserts before owner 2's entry */
+}
+
+/* A callback that registers another callback while pre_init fires must not make the loader skip
+   (or repeat) the callbacks after it. */
+TEST(register_during_fire_keeps_order)
+{
+    start();
+    (void)g_dummy;
+    ev_register(1, RON_EV_PRE_INIT, cb_a_registers, NULL);
+    ev_register(2, RON_EV_PRE_INIT, cb_b, NULL);
+    ev_fire(RON_EV_PRE_INIT, NULL);
+    CHECK_STR(g_seq, "ab");
+    ev_reset();
+}

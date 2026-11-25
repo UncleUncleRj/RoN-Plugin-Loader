@@ -9,14 +9,16 @@
 
 int hk_add1(int x);
 
-/* A fresh game folder in %TEMP% with a copy of build\testgame\plugins (and plugins\GoodFiles). */
-static void make_game(wchar_t *dir)
+/* A fresh game folder in %TEMP% with a copy of build\<fixture>\plugins (and plugins\GoodFiles). */
+static void make_game_from(wchar_t *dir, const wchar_t *fixture)
 {
     static int counter;
     wchar_t src[MAX_PATH], pattern[MAX_PATH], plugins[MAX_PATH];
     GetModuleFileNameW(NULL, src, MAX_PATH);
     *wcsrchr(src, L'\\') = 0;
-    wcscat(src, L"\\testgame\\plugins");
+    wcscat(src, L"\\");
+    wcscat(src, fixture);
+    wcscat(src, L"\\plugins");
     GetTempPathW(MAX_PATH, dir);
     swprintf(dir + wcslen(dir), 64, L"ron_loader_game_%lu_%d", GetCurrentProcessId(), ++counter);
     CreateDirectoryW(dir, NULL);
@@ -39,6 +41,8 @@ static void make_game(wchar_t *dir)
     wcscat(plugins, L"\\GoodFiles");
     CreateDirectoryW(plugins, NULL);
 }
+
+static void make_game(wchar_t *dir) { make_game_from(dir, L"testgame"); }
 
 static int run(const wchar_t *dir, RonExeKind kind)
 {
@@ -114,6 +118,7 @@ TEST(run_loads_good_only)
     CHECK(strstr(log, "NoIni.dll has no NoIni.ini") != NULL);
     CHECK(strstr(log, "[Good] pre_init") != NULL);
     CHECK(strstr(log, "plugin Good 1.0 loaded") != NULL);
+    CHECK(strstr(log, "loading Good") != NULL);  /* written before its code runs */
     CHECK(strstr(log, "plugin Zero failed: returned 0") != NULL);
 }
 
@@ -172,4 +177,30 @@ TEST(run_unknown_exe)
     static char log[4096];
     read_file(dir, L"plugins\\loader.log", log, sizeof log);
     CHECK(strstr(log, "unknown game build, no plugins loaded") != NULL);
+}
+
+/* Hooks are accepted only inside RonPluginMain: one made from a pre_init callback is refused, so it
+   cannot jump ahead of lower plugins in a chain. */
+TEST(run_late_hook_refused)
+{
+    wchar_t dir[MAX_PATH];
+    make_game_from(dir, L"testgame2");
+    run(dir, RON_EXE_STOCK);
+    static char log[8192];
+    read_file(dir, L"plugins\\loader.log", log, sizeof log);
+    CHECK(strstr(log, "[LateHook] late hook 4") != NULL);  /* RON_E_STATE */
+    CHECK_EQ(hk_add1(1), 2);
+}
+
+/* A plugin written in C++ is found through the header alone (RonPluginMain keeps its C name). */
+TEST(run_cpp_plugin_loads)
+{
+    wchar_t dir[MAX_PATH];
+    make_game_from(dir, L"testgame2");
+    run(dir, RON_EXE_STOCK);
+    const LoaderPlugin *cpp = find(L"CppGood");
+    CHECK(cpp && cpp->state == LP_LOADED);
+    static char log[8192];
+    read_file(dir, L"plugins\\loader.log", log, sizeof log);
+    CHECK(strstr(log, "[CppGood] cpp loaded") != NULL);
 }

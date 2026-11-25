@@ -39,10 +39,21 @@ RonResult ev_register(int owner, RonEvent ev, RonEventFn fn, void *user)
 
 void ev_fire(RonEvent ev, void *game_object)
 {
+    if (g_locked) {  /* nothing can register any more: walk the list itself */
+        for (int i = 0; i < g_ncb; i++) {
+            if (g_cb[i].ev == ev)
+                g_cb[i].fn(ev, game_object, g_cb[i].user);
+        }
+        return;
+    }
+    /* While plugins load (pre_init), a callback may register another one, which shifts the sorted
+       list: walk a copy, so no callback is skipped or called twice. */
+    Callback copy[MAX_CALLBACKS];
     int n = g_ncb;
+    memcpy(copy, g_cb, (size_t)n * sizeof copy[0]);
     for (int i = 0; i < n; i++) {
-        if (g_cb[i].ev == ev)
-            g_cb[i].fn(ev, game_object, g_cb[i].user);
+        if (copy[i].ev == ev)
+            copy[i].fn(ev, game_object, copy[i].user);
     }
 }
 

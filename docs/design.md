@@ -177,10 +177,17 @@ All code patching goes through the loader, which keeps one record per patched ad
 - Hooks on the same function **chain in load order**: each plugin's "original" is the hook of
   the plugin above it, ending at the game's code. So **the lowest plugin's hook runs first** and
   can decide whether the ones above it run at all, which matches "the lower one wins".
-- Forms offered: inline (5-byte `jmp` plus trampoline with relocated stolen bytes), call site
-  (`E8 rel32`, no stolen bytes), vtable slot, import address table.
-- Hooks and byte patches are installed only while plugins load (during `pre_init`, before the game
-  starts its other threads) and are never removed (my call). A plugin that wants an in-game on/off
+- Forms offered: inline (5-byte `jmp` plus a trampoline holding the stolen bytes, copied as they
+  are: they must hold no relative branch or call, as the header says; a length decoder that
+  relocates or refuses them is a later option), call site (`E8 rel32`, no stolen bytes), vtable
+  slot, import address table. A plugin may chain onto an inline hook with a longer signature than
+  the first one's: the extra bytes are checked against memory.
+- An address that is not committed, readable memory fails that one request (`RON_E_ARG`), never
+  the game.
+- Hooks and byte patches are installed only inside `RonPluginMain` (before the game starts its
+  other threads) and are never removed (my call). Event registration stays open through
+  `pre_init`. A hook made from a `pre_init` callback would land on top of every chain and run
+  before lower plugins' hooks, so it is refused (found in review, 2026-11-24). A plugin that wants an in-game on/off
   switch keeps its hook and checks its own flag. So no patch ever happens while game threads run,
   and the chain never needs a link removed from the middle.
 - Every shared address is logged with the plugins involved, and recorded for the later conflict
@@ -389,3 +396,7 @@ Later
 - That disabling Start through `SetupWin::start_button_disable` holds while the lobby updates.
 - Plugin state in save games: `Game::walk_data` (`0x589600`) serves save, load and the checksum,
   but adding data there changes the save format.
+- Whether `shutdown` (the return of `Main::run_game_loop`) also fires on the menu's Quit and on
+  closing the window; only the console `quit` was traced.
+- Whether loading a save or a replay goes through `Setup::build_game` (callers: `Game::init+0xD33`,
+  `ConsoleWin::run_cmd`), so that `match_built` and `match_end` fire for those matches too.
