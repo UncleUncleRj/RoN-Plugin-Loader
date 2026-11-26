@@ -21,7 +21,9 @@ loader switches itself off (the game then runs without plugins) until a matching
 1. Download `RoN-Plugin-Loader-<version>.zip` from the [Releases page](../../releases/latest).
 2. Open the game folder: in Steam, right-click **Rise of Nations: Extended Edition** and choose
    **Manage → Browse local files**. It's the folder that holds `riseofnations.exe`.
-3. Unzip the download and copy `shfolder.dll` into that folder, next to `riseofnations.exe`.
+3. Unzip the download and copy `shfolder.dll` into that folder, next to `riseofnations.exe`. Only
+   `shfolder.dll` goes there: the zip's other files are these steps (`installation.txt`) and the
+   license (`LICENSE.txt`).
 4. Start the game from Steam as usual. In the main menu, open **Tools & Extras**: a new **Plugins**
    button sits under Steam Workshop. If it's there, the loader works.
 
@@ -90,3 +92,12 @@ is gone. To remove your plugins as well, delete the `plugins` folder.
 
 How to write a plugin, build the loader and how it works inside:
 [docs/developers.md](docs/developers.md).
+
+## License
+
+RoN Plugin Loader is copyright 2026 Rj Simas. It is under the Mozilla Public License 2.0
+([LICENSE](LICENSE)), except the plugin API header, `include/ron_plugin.h`, which is under the MIT
+license (its notice is in the file) so that any plugin may copy it.
+
+This Source Code Form is subject to the terms of the Mozilla Public License, v. 2.0. If a copy of
+the MPL was not distributed with this file, You can obtain one at https://mozilla.org/MPL/2.0/.

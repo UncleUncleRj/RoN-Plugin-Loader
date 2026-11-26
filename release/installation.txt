@@ -1,0 +1,27 @@
+RoN Plugin Loader: installation
+===============================
+
+For Rise of Nations: Extended Edition (the current Steam version).
+
+1. Open the game folder: in Steam, right-click Rise of Nations: Extended Edition
+   and choose Manage > Browse local files. It is the folder that holds
+   riseofnations.exe.
+
+2. Copy shfolder.dll into that folder, next to riseofnations.exe.
+   Only shfolder.dll goes there; this file and LICENSE.txt can stay where they are.
+
+3. Start the game from Steam as usual. In the main menu, open Tools & Extras:
+   a new Plugins button sits under Steam Workshop. If it is there, the loader works.
+
+Plugins: the first start makes a "plugins" folder in the game folder. Copy each
+plugin's .dll, its .ini of the same name, and its folder if it has one, straight
+into "plugins". Then choose your plugins and their order in
+Tools & Extras > Plugins.
+
+Update: replace shfolder.dll in the game folder with the new one. Your plugins
+and their order stay as they are.
+
+Uninstall: delete shfolder.dll from the game folder. To remove your plugins as
+well, delete the "plugins" folder.
+
+The loader is under the Mozilla Public License 2.0 (LICENSE.txt).
