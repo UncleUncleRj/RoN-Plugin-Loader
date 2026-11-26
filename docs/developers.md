@@ -24,6 +24,7 @@ Needs Python with zig (`python -m pip install ziglang`) and Windows PowerShell.
 powershell -File build.ps1                 # build\shfolder.dll (the loader) and build\plugins\: HelloPlugin, SplashTest1, SplashTest2
 powershell -File build.ps1 -Test           # also builds build\tests.exe and build\testgame\, and runs the tests
 powershell -File build.ps1 -Test -Package  # tests, then the release zip (see "Version and releases")
+powershell -File dist_build.ps1            # only shfolder.dll and the release zip, dist\RoN-Plugin-Loader-<version>.zip; no plugins, no tests
 ```
 
 The tests need no game: they cover the ini and load-order files, the symbol map, the hook manager
@@ -70,9 +71,10 @@ To make a release:
 1. Raise the version in `src/common/version.h` (and, if the API changed, `RON_API_MINOR` or
    `RON_API_MAJOR` with it).
 2. `powershell -File build.ps1 -Test -Package`. It stops before packaging if a test fails, and
-   writes `build\RoN-Plugin-Loader-<version>.zip`, which holds `shfolder.dll`, the player's
+   writes `dist\RoN-Plugin-Loader-<version>.zip`, which holds `shfolder.dll`, the player's
    installation steps (`release/installation.txt`) and the license (`LICENSE` as `LICENSE.txt`),
-   and no example or test plugins.
+   and no example or test plugins. `./dist_build.ps1` writes the same zip without building the
+   plugins or running the tests.
 3. Upload that zip as the release's one download, with a tag such as `v1.1.0`.
 
 ## Writing a plugin
@@ -165,5 +167,6 @@ skips the intros). Copy `SplashTestN.dll`, `SplashTestN.ini` and the `SplashTest
 | `plugins/SplashTest/` | The two load-order test plugins (one source) and their ini files |
 | `tests/` | The test program, its test plugins and fixtures |
 | `release/` | `installation.txt`, the player's steps that go into the release zip |
+| `build.ps1`, `dist_build.ps1` | The build (above); `dist_build.ps1` makes only the release zip, in `dist\` (git-ignored, like `build\`) |
 | `tools/` | Dev install scripts, `plan_html.py`, `make_splash_videos.ps1` |
 | `docs/` | These notes, the design, the build plans |
