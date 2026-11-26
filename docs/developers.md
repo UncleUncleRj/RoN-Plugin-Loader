@@ -70,8 +70,9 @@ To make a release:
 1. Raise the version in `src/common/version.h` (and, if the API changed, `RON_API_MINOR` or
    `RON_API_MAJOR` with it).
 2. `powershell -File build.ps1 -Test -Package`. It stops before packaging if a test fails, and
-   writes `build\RoN-Plugin-Loader-<version>.zip`, which holds `shfolder.dll` and nothing else (no
-   example or test plugins).
+   writes `build\RoN-Plugin-Loader-<version>.zip`, which holds `shfolder.dll`, the player's
+   installation steps (`release/installation.txt`) and the license (`LICENSE` as `LICENSE.txt`),
+   and no example or test plugins.
 3. Upload that zip as the release's one download, with a tag such as `v1.1.0`.
 
 ## Writing a plugin
@@ -155,6 +156,7 @@ skips the intros). Copy `SplashTestN.dll`, `SplashTestN.ini` and the `SplashTest
 
 | Path | What |
 |---|---|
+| `LICENSE` | Mozilla Public License 2.0, for everything but `include/ron_plugin.h` |
 | `include/ron_plugin.h` | The plugin API, the only header a plugin includes. MIT license (its notice is in the file), so any plugin may copy it |
 | `src/bootstrap/` | The start of `shfolder.dll`: loads at process start, hooks `Main::main`, runs the loader from there; `version.rc` its version resource |
 | `src/loader/` | The loader, built into `shfolder.dll`: load order, plugin ini files, symbol map, hook manager, events, API, safe start, the file service (`files.c` who serves what, `files_game.c` the hook on the game's own lookup, `files_win32.c` KernelBase's file calls and merged folder listings), the Plugins panel (`panel.c` state, `menufile.c` the generated menu file, `menu.c` and `menu_draw.c` the menu hooks and drawing, `game.c` the engine calls they use) |
@@ -162,5 +164,6 @@ skips the intros). Copy `SplashTestN.dll`, `SplashTestN.ini` and the `SplashTest
 | `plugins/HelloPlugin/` | The example plugin |
 | `plugins/SplashTest/` | The two load-order test plugins (one source) and their ini files |
 | `tests/` | The test program, its test plugins and fixtures |
+| `release/` | `installation.txt`, the player's steps that go into the release zip |
 | `tools/` | Dev install scripts, `plan_html.py`, `make_splash_videos.ps1` |
 | `docs/` | These notes, the design, the build plans |

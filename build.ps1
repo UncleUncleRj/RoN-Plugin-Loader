@@ -2,7 +2,8 @@
 #   powershell -File build.ps1          build shfolder.dll (the loader, one file) and the example plugin into build\
 #   powershell -File build.ps1 -Test    also build build\tests.exe (+ build\testgame\) and run the tests
 #   powershell -File build.ps1 -Package also write the release, build\RoN-Plugin-Loader-<version>.zip
-#                                        (shfolder.dll only; the version from src\common\version.h)
+#                                        (shfolder.dll, installation.txt, LICENSE.txt; the version from
+#                                        src\common\version.h)
 param(
     [switch]$Test,
     [switch]$Package,
@@ -90,7 +91,8 @@ if ($Test) {
 }
 
 if ($Package) {
-    # The release: one zip holding shfolder.dll and nothing else (no example or test plugins)
+    # The release: one zip holding shfolder.dll, the player's installation steps and the license
+    # (no example or test plugins)
     $h = Get-Content -Raw (Join-Path $root 'src\common\version.h')
     $v = foreach ($part in 'MAJOR', 'MINOR', 'PATCH') {
         if ($h -notmatch "#define LOADER_VERSION_$part (\d+)") { throw "version.h: no LOADER_VERSION_$part" }
@@ -98,7 +100,13 @@ if ($Package) {
     }
     $zip = Join-Path $build "RoN-Plugin-Loader-$($v -join '.').zip"
     if (Test-Path $zip) { Remove-Item -Force $zip }
-    Compress-Archive -Path (Join-Path $build 'shfolder.dll') -DestinationPath $zip
+    $stage = Join-Path $build 'release'
+    if (Test-Path $stage) { Remove-Item -Recurse -Force $stage }
+    New-Item -ItemType Directory $stage | Out-Null
+    Copy-Item (Join-Path $build 'shfolder.dll') $stage
+    Copy-Item (Join-Path $root 'release\installation.txt') $stage
+    Copy-Item (Join-Path $root 'LICENSE') (Join-Path $stage 'LICENSE.txt')
+    Compress-Archive -Path (Join-Path $stage '*') -DestinationPath $zip
     Write-Output "packaged $zip"
 }
 exit 0
