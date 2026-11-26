@@ -1,7 +1,8 @@
 RoN Plugin Loader: installation
 ===============================
 
-For Rise of Nations: Extended Edition (the current Steam version).
+For Rise of Nations: Extended Edition (the current Steam version), on Windows 10
+or higher.
 
 1. Open the game folder: in Steam, right-click Rise of Nations: Extended Edition
    and choose Manage > Browse local files. It is the folder that holds
