@@ -1,12 +1,15 @@
 # Builds the RoN Plugin Loader with zig cc (python -m pip install ziglang).
-#   powershell -File build.ps1          build shfolder.dll (the loader, one file) and the example plugin into build\
-#   powershell -File build.ps1 -Test    also build build\tests.exe (+ build\testgame\) and run the tests
-#   powershell -File build.ps1 -Package also write the release, build\RoN-Plugin-Loader-<version>.zip
-#                                        (shfolder.dll, installation.txt, LICENSE.txt; the version from
-#                                        src\common\version.h)
+#   powershell -File build.ps1             build shfolder.dll (the loader, one file) and the example and test
+#                                          plugins into build\
+#   powershell -File build.ps1 -Test       also build build\tests.exe (+ build\testgame\) and run the tests
+#   powershell -File build.ps1 -Package    also write the release, dist\RoN-Plugin-Loader-<version>.zip
+#                                          (shfolder.dll, installation.txt, LICENSE.txt; the version from
+#                                          src\common\version.h)
+#   powershell -File build.ps1 -LoaderOnly build shfolder.dll and no plugins (dist_build.ps1 adds -Package)
 param(
     [switch]$Test,
     [switch]$Package,
+    [switch]$LoaderOnly,
     [string]$GameDir = 'C:\Program Files (x86)\Steam\steamapps\common\Rise of Nations'
 )
 $ErrorActionPreference = 'Stop'
@@ -17,9 +20,14 @@ New-Item -ItemType Directory -Force $build | Out-Null
 $cc = @('-m', 'ziglang', 'cc', '-target', 'x86-windows-gnu', '-O2', '-msse2', '-mstackrealign',
         '-I', (Join-Path $root 'include'), '-I', (Join-Path $root 'src'))
 
+# Each pattern's files in NTFS order (ordinal, ignoring case), sorted here because PowerShell 7's
+# Get-ChildItem returns another order than Windows PowerShell's: the link order, and so the DLL's
+# bytes, must not depend on the shell that runs the build
 function Get-Sources([string[]]$patterns) {
     foreach ($p in $patterns) {
-        Get-ChildItem -Path (Join-Path $root $p) -ErrorAction SilentlyContinue | ForEach-Object { $_.FullName }
+        $files = [string[]]@(Get-ChildItem -Path (Join-Path $root $p) -ErrorAction SilentlyContinue | ForEach-Object { $_.FullName })
+        [Array]::Sort($files, [StringComparer]::OrdinalIgnoreCase)
+        $files
     }
 }
 
@@ -32,24 +40,28 @@ function Invoke-CC([string]$what, [string[]]$ccArgs) {
 $dllSrc = @(Get-Sources @('src\bootstrap\*.c', 'src\loader\*.c', 'src\common\*.c')) + @(Join-Path $root 'src\bootstrap\shfolder.def') + @(Join-Path $root 'src\bootstrap\version.rc')
 Invoke-CC 'shfolder.dll' (@('-shared', '-s', '-o', (Join-Path $build 'shfolder.dll')) + $dllSrc + @('-lkernel32', '-luser32', '-lbcrypt'))
 Get-ChildItem $build -Filter 'RonPluginLoader.*' | Remove-Item -Force   # left over from the two-file builds
-# The example plugin: build\plugins\HelloPlugin.dll + HelloPlugin.ini
-$bp = Join-Path $build 'plugins'
-New-Item -ItemType Directory -Force $bp | Out-Null
-Invoke-CC 'HelloPlugin.dll' @('-shared', '-s', '-o', (Join-Path $bp 'HelloPlugin.dll'),
-    (Join-Path $root 'plugins\HelloPlugin\HelloPlugin.c'), '-lkernel32')
-Get-ChildItem $bp -Filter 'HelloPlugin.*' -Exclude 'HelloPlugin.dll' | Remove-Item -Force
-Copy-Item (Join-Path $root 'plugins\HelloPlugin\HelloPlugin.ini') $bp
-# Load-order test plugins: SplashTest1.dll and SplashTest2.dll from one source, their .ini files, and
-# their videos in plugins\SplashTest1\ and plugins\SplashTest2\ (ffmpeg; skipped with a warning without it)
-foreach ($n in 1, 2) {
-    $name = "SplashTest$n"
-    Invoke-CC "$name.dll" @('-shared', '-s', "-DSPLASH_N=$n", '-o', (Join-Path $bp "$name.dll"),
-        (Join-Path $root 'plugins\SplashTest\SplashTest.c'), '-lkernel32')
-    Get-ChildItem $bp -Filter "$name.*" -Exclude "$name.dll" | Remove-Item -Force
-    Copy-Item (Join-Path $root "plugins\SplashTest\$name.ini") $bp
-    & (Join-Path $root 'tools\make_splash_videos.ps1') -N $n -Out (Join-Path $bp $name)
+if ($LoaderOnly) {
+    Write-Output 'built shfolder.dll'
+} else {
+    # The example plugin: build\plugins\HelloPlugin.dll + HelloPlugin.ini
+    $bp = Join-Path $build 'plugins'
+    New-Item -ItemType Directory -Force $bp | Out-Null
+    Invoke-CC 'HelloPlugin.dll' @('-shared', '-s', '-o', (Join-Path $bp 'HelloPlugin.dll'),
+        (Join-Path $root 'plugins\HelloPlugin\HelloPlugin.c'), '-lkernel32')
+    Get-ChildItem $bp -Filter 'HelloPlugin.*' -Exclude 'HelloPlugin.dll' | Remove-Item -Force
+    Copy-Item (Join-Path $root 'plugins\HelloPlugin\HelloPlugin.ini') $bp
+    # Load-order test plugins: SplashTest1.dll and SplashTest2.dll from one source, their .ini files, and
+    # their videos in plugins\SplashTest1\ and plugins\SplashTest2\ (ffmpeg; skipped with a warning without it)
+    foreach ($n in 1, 2) {
+        $name = "SplashTest$n"
+        Invoke-CC "$name.dll" @('-shared', '-s', "-DSPLASH_N=$n", '-o', (Join-Path $bp "$name.dll"),
+            (Join-Path $root 'plugins\SplashTest\SplashTest.c'), '-lkernel32')
+        Get-ChildItem $bp -Filter "$name.*" -Exclude "$name.dll" | Remove-Item -Force
+        Copy-Item (Join-Path $root "plugins\SplashTest\$name.ini") $bp
+        & (Join-Path $root 'tools\make_splash_videos.ps1') -N $n -Out (Join-Path $bp $name)
+    }
+    Write-Output 'built shfolder.dll, plugins\HelloPlugin.dll, plugins\SplashTest1.dll, plugins\SplashTest2.dll'
 }
-Write-Output 'built shfolder.dll, plugins\HelloPlugin.dll, plugins\SplashTest1.dll, plugins\SplashTest2.dll'
 
 if ($Test) {
     # build\testgame\plugins: test plugins for the loader tests (tests\plugins\*.c and their .ini files)
@@ -98,7 +110,9 @@ if ($Package) {
         if ($h -notmatch "#define LOADER_VERSION_$part (\d+)") { throw "version.h: no LOADER_VERSION_$part" }
         $Matches[1]
     }
-    $zip = Join-Path $build "RoN-Plugin-Loader-$($v -join '.').zip"
+    $dist = Join-Path $root 'dist'
+    New-Item -ItemType Directory -Force $dist | Out-Null
+    $zip = Join-Path $dist "RoN-Plugin-Loader-$($v -join '.').zip"
     if (Test-Path $zip) { Remove-Item -Force $zip }
     $stage = Join-Path $build 'release'
     if (Test-Path $stage) { Remove-Item -Recurse -Force $stage }
