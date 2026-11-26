@@ -1,9 +1,14 @@
 # RoN Plugin Loader
 
-Plugins for **Rise of Nations: Extended Edition**. Put plugins in a folder, then choose which ones
-run, and in what order, from the game's own main menu.
+## What this does:
 
-- Works with Steam's Play button: no launcher, no extra program to start.
+### Adds the ability for **Rise of Nations: Extended Edition** to load advanced .dll plugin mods and sort their loading order!
+
+You download from modders a .dll plugin file into a special `/plugins/` folder in the game directory,
+then choose in-game which ones to run, and in what order, from the game's own main menu,
+similar to the steam workshop window already in-game.
+
+- No extra launcher needed, no extra program to start.
 - Works alongside the game's own mods and Steam Workshop items.
 - With no plugins installed, the game plays exactly as before; you only get a new **Plugins**
   button in the menu.
@@ -11,31 +16,28 @@ run, and in what order, from the game's own main menu.
 ## What you need
 
 - Rise of Nations: Extended Edition on Steam, up to date.
-- Windows.
+- Windows 10 or higher (Windows 7 support is planned!).
 
 The loader is made for the current Steam version of the game. If a game update ever changes it, the
 loader switches itself off (the game then runs without plugins) until a matching release is out.
 
-## Install
+## Installation instructions for the loader
 
 1. Download `RoN-Plugin-Loader-<version>.zip` from the [Releases page](../../releases/latest).
 2. Open the game folder: in Steam, right-click **Rise of Nations: Extended Edition** and choose
-   **Manage → Browse local files**. It's the folder that holds `riseofnations.exe`.
-3. Unzip the download and copy `shfolder.dll` into that folder, next to `riseofnations.exe`. Only
-   `shfolder.dll` goes there: the zip's other files are these steps (`installation.txt`) and the
-   license (`LICENSE.txt`).
+   **Manage → Browse local files**.
+3. Copy `shfolder.dll` from the zip file into that folder, next to `riseofnations.exe`. The zip's
+   other two files, `installation.txt` (these steps) and `LICENSE.txt`, don't go in the game folder.
 4. Start the game from Steam as usual. In the main menu, open **Tools & Extras**: a new **Plugins**
    button sits under Steam Workshop. If it's there, the loader works.
 
-The file shares its name with a small Windows file on purpose: the game picks up this copy from its
-own folder. Windows' own copy is not touched.
-
-## Add a plugin
+## Add a plugin mod
 
 1. In the game folder there is now a `plugins` folder (the loader makes it the first time the game
    starts). A plugin is a `.dll` file and an `.ini` file with the same name, often with a folder of
-   its own. Copy all of them straight into `plugins`, side by side. For a plugin called Better
-   Minimap:
+   its own. Copy all of them straight into `plugins`, side by side.
+
+   Let's say you download a plugin called Better Minimap:
    ```
    Rise of Nations\plugins\
        Better Minimap.dll
@@ -58,30 +60,18 @@ Select a plugin to see its version, author and description.
 
 ## Multiplayer
 
-Everyone in a multiplayer game needs the same gameplay plugins, in the same order, or the match goes
-out of sync. The loader doesn't check this for you yet, so agree on your plugins before you start.
+Everyone in a multiplayer game must have the same plugins, in the same order, or the match goes
+out of sync.
+
+The loader doesn't check this for you (yet), so agree on your plugins before you start.
+
 Plugins that only change the look or the interface don't have to match; the plugin's author can
 tell you which kind theirs is.
 
-## If something goes wrong
+## To report a problem
 
-- **No Plugins button.** Check that `shfolder.dll` is right next to `riseofnations.exe`, and that
-  the game is the current Steam version. Then look in `plugins\loader.log` in the game folder,
-  which the loader writes at every start; no `plugins` folder at all means the loader didn't run.
-- **The game crashed or froze while starting.** The next start runs without any plugins, and the
-  Plugins panel says so. The plugin that was loading at the time is marked **failed**: turn it off,
-  then Apply and Restart.
-- **A plugin is marked failed.** Select it on the Plugins panel; its description says why.
-- **You have an older RON Revived installed** (one that put a `winmm.dll` in the game folder). The
-  loader loads no plugins while it's there. Uninstall that version first.
-
-To report a problem, [open an issue](../../issues) and attach `plugins\loader.log` (its first line
+- [open an issue](../../issues) and attach `plugins\loader.log` (its first line
 names the loader's version).
-
-## Update
-
-Download the new release and replace `shfolder.dll` in the game folder. Your plugins and their order
-stay as they are.
 
 ## Uninstall
 
